@@ -89,4 +89,4 @@ The workflow in `.github/workflows/scout.yml` runs every hour. Add the required 
 
 ## Status
 
-**Phase 1 complete** — project scaffold in place. Implementation begins in Phase 2.
+**Phase 2 complete** — config loading, all data models, and resume loader are implemented and tested. Scraping, extraction, matching, and notification are in progress.
