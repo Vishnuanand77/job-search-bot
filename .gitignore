@@ -1,0 +1,11 @@
+setup.py
+.env
+.cache/
+__pycache__/
+.pytest_cache/
+htmlcov/
+*.pyc
+.playwright/
+.venv/
+dist/
+*.egg-info/

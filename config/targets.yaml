@@ -1,0 +1,7 @@
+sites:
+  - name: Example Corp
+    url: https://example.com/careers
+    scrape_tier: http
+  - name: Example Startup
+    url: https://example.startup/jobs
+    scrape_tier: playwright

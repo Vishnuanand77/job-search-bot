@@ -1,11 +1,8 @@
 # Job Scout — Claude Code Build Plan
 
-Read `.claude/CLAUDE.md` first — it contains all coding standards, TDD rules,
-and API conventions that apply to every phase. Follow them automatically
-without being reminded in conversation.
+Read `.claude/CLAUDE.md` first — it contains all coding standards, TDD rules, and API conventions that apply to every phase. Follow them automatically without being reminded in conversation.
 
-At the end of each phase, run `/pr-review`, open a PR, and stop. Do not begin
-the next phase until the PR has been explicitly approved.
+At the end of each phase, run `/pr-review`, open a PR, and stop. Do not begin the next phase until the PR has been explicitly approved.
 
 ---
 
