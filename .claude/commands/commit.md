@@ -47,7 +47,7 @@ Format: `type(scope): short description`
 - Scope matches the phase or module: `phase-1`, `models`, `scraper`, `extractor`, `matcher`, `notifier`, `orchestrator`
 - Description: imperative mood, lowercase, no period — "add retry logic" not "Added retry logic."
 - 72 characters max on the subject line
-- If more context is needed, leave a blank line then add a body
+- Subject line only — no body. One sentence, to the point. If the diff is self-explanatory, it needs no elaboration.
 
 **Examples:**
 ```

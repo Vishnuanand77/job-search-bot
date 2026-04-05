@@ -37,6 +37,15 @@ git diff --cached
 - [ ] `.env.example` updated if new env vars introduced
 - [ ] No `.env` file staged
 
+## Update README.md
+
+Before opening the PR, update `README.md` to reflect the current state of the project:
+
+- Add or update any sections that describe completed functionality
+- Update setup/usage instructions if new steps are required (e.g. new env vars, new commands)
+- Remove placeholder text that no longer applies
+- Do not document future phases — only what is working now
+
 ## PR body must include
 
 1. One paragraph: what this phase builds and why
