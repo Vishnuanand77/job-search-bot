@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add -p)",
+      "Bash(git checkout *)",
+      "Bash(git branch *)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git commit *)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)",
+      "Bash(pip *)",
+      "Bash(pip3 *)",
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Edit(**/.env)"
+    ]
+  }
+}
