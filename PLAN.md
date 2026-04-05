@@ -6,6 +6,30 @@ At the end of each phase, run `/pr-review`, open a PR, and stop. Do not begin th
 
 ---
 
+## Branch Strategy
+
+Each phase lives on its own branch. Never commit phase work directly to `main`.
+
+```bash
+# Start a phase
+git checkout main
+git pull
+git checkout -b phase-N-short-description
+
+# During the phase: commit to the branch
+git add -p
+git commit -m "feat(phase-N): ..."
+
+# End of phase: push, open PR targeting main, run /pr-review, stop
+git push -u origin phase-N-short-description
+```
+
+Branch naming convention: `phase-N-<slug>` (e.g. `phase-2-config-models`, `phase-3-scraper`)
+
+PRs must target `main`. Merge only after explicit approval. Delete the branch after merge.
+
+---
+
 ## Project Purpose
 
 A Python cron job running every hour via GitHub Actions that:
@@ -274,7 +298,7 @@ jobs:
 **Done condition:** `uv run pytest` runs with 0 tests, 0 errors.
 Tree matches the structure exactly.
 
-**Git:** `chore(phase-1): project scaffold` → `/pr-review` → PR → stop.
+**Git:** branch `phase-1-scaffold` → `chore(phase-1): project scaffold` → `/pr-review` → PR → stop.
 
 ---
 
@@ -360,7 +384,7 @@ Adding a 4th `.md` file to `resumes/` requires zero code changes.
 - `test_raises_when_resume_directory_does_not_exist`
 
 **Done condition:** All tests pass. `pytest --cov` ≥ 80%.
-**Git:** `feat(phase-2): config, models, resume loader` → `/pr-review` → PR → stop.
+**Git:** branch `phase-2-config-models` → `feat(phase-2): config, models, resume loader` → `/pr-review` → PR → stop.
 
 ---
 
@@ -454,7 +478,7 @@ output in the Phase 3 PR body.**
 
 **Done condition:** All scraper unit tests pass. Probe run completed.
 `targets.yaml` reflects real confirmed tiers.
-**Git:** `feat(phase-3): scraper and probe tool` → `/pr-review` → PR → stop.
+**Git:** branch `phase-3-scraper` → `feat(phase-3): scraper and probe tool` → `/pr-review` → PR → stop.
 
 ---
 
@@ -522,7 +546,7 @@ Cap at 50 jobs per site per run. Log WARNING if more than 50 returned.
 
 **Done condition:** All tests pass. Manually verify extraction output against
 one real page of scraped content from Phase 3.
-**Git:** `feat(phase-4): claude job extractor` → `/pr-review` → PR → stop.
+**Git:** branch `phase-4-extractor` → `feat(phase-4): claude job extractor` → `/pr-review` → PR → stop.
 
 ---
 
@@ -569,7 +593,7 @@ not be re-evaluated on every subsequent run.
 - `test_get_consecutive_zeros_returns_0_for_unknown_site`
 
 **Done condition:** All tests pass. Manually verify via Supabase dashboard.
-**Git:** `feat(phase-5): supabase dedup store` → `/pr-review` → PR → stop.
+**Git:** branch `phase-5-dedup` → `feat(phase-5): supabase dedup store` → `/pr-review` → PR → stop.
 
 ---
 
@@ -637,7 +661,7 @@ resume. No truncation of either.
 
 **Done condition:** All tests pass. Manually test on one real job posting
 with your actual resumes. Verify scores and missing keywords are sensible.
-**Git:** `feat(phase-6): claude resume matcher` → `/pr-review` → PR → stop.
+**Git:** branch `phase-6-matcher` → `feat(phase-6): claude resume matcher` → `/pr-review` → PR → stop.
 
 ---
 
@@ -733,7 +757,7 @@ Check GitHub Actions logs for full traceback.
 
 **Done condition:** All tests pass. Send a live test digest and failure
 alert to your real Telegram bot.
-**Git:** `feat(phase-7): telegram notifier` → `/pr-review` → PR → stop.
+**Git:** branch `phase-7-notifier` → `feat(phase-7): telegram notifier` → `/pr-review` → PR → stop.
 
 ---
 
@@ -811,7 +835,7 @@ Any exception escaping per-site handling → `send_failure_alert` before propaga
 
 **Done condition:** All tests pass. Full dry run:
 `DRY_RUN=true uv run python -m job_scout.orchestrator`
-**Git:** `feat(phase-8): orchestrator` → `/pr-review` → PR → stop.
+**Git:** branch `phase-8-orchestrator` → `feat(phase-8): orchestrator` → `/pr-review` → PR → stop.
 
 ---
 
@@ -830,7 +854,7 @@ Any exception escaping per-site handling → `send_failure_alert` before propaga
 5. Trigger GitHub Actions manually → confirm green run + Telegram message.
 
 **Done condition:** Live message received. Supabase populated. Actions green.
-**Git:** `chore(phase-9): live targets and resumes` → PR → stop.
+**Git:** branch `phase-9-live-validation` → `chore(phase-9): live targets and resumes` → PR → stop.
 
 ---
 
@@ -868,7 +892,7 @@ Cover any uncovered critical paths. Target: ≥ 85%.
 
 **Done condition:** All hardening tests pass. Coverage ≥ 85%.
 Clean live end-to-end run. Production-ready v1.0.
-**Git:** `feat(phase-10): hardening` → `/pr-review` → Final PR.
+**Git:** branch `phase-10-hardening` → `feat(phase-10): hardening` → `/pr-review` → Final PR.
 
 ---
 
@@ -890,6 +914,7 @@ Repo → Settings → Secrets → Actions → New repository secret:
 ## Final instruction to Claude Code
 
 Work strictly phase by phase. Do not begin a phase until the previous PR
-is approved. Always show failing test output before writing implementation.
-Always show passing output after. Never `git add .` — always `git add -p`.
-Stop and ask when any architectural decision is unclear.
+is approved. Always create a fresh branch from `main` before starting a phase.
+Always show failing test output before writing implementation. Always show
+passing output after. Never `git add .` — always `git add -p`. Stop and ask
+when any architectural decision is unclear.
