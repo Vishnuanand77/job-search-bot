@@ -45,7 +45,13 @@ Required environment variables (see `.env.example`):
 
 ### Add target companies
 
-Edit `config/targets.yaml`:
+Before adding a site, probe it to confirm which scraper tier works:
+
+```bash
+uv run python scripts/probe_sites.py https://example.com/careers
+```
+
+Then edit `config/targets.yaml`:
 
 ```yaml
 sites:
@@ -89,4 +95,4 @@ The workflow in `.github/workflows/scout.yml` runs every hour. Add the required 
 
 ## Status
 
-**Phase 2 complete** — config loading, all data models, and resume loader are implemented and tested. Scraping, extraction, matching, and notification are in progress.
+**Phase 3 complete** — two-tier scraper (HTTP → Playwright fallback), HTML cleaning, and probe tool are implemented and tested. All 7 target sites probed and confirmed. Extraction, matching, and notification are in progress.
