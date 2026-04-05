@@ -1,1 +1,35 @@
-pass
+import logging
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+BROWSER_HEADERS: dict[str, str] = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/123.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate, br",
+}
+
+SCRAPE_TIMEOUT = 30.0
+
+
+async def fetch_html(url: str, client: httpx.AsyncClient) -> str | None:
+    """Fetch raw HTML via HTTP. Returns None on 403, timeout, or connection error."""
+    try:
+        response = await client.get(url, headers=BROWSER_HEADERS, timeout=SCRAPE_TIMEOUT)
+        response.raise_for_status()
+        return response.text
+    except httpx.HTTPStatusError as exc:
+        logger.warning("HTTP %s fetching %s", exc.response.status_code, url)
+        return None
+    except httpx.TimeoutException:
+        logger.warning("Timeout fetching %s", url)
+        return None
+    except httpx.ConnectError:
+        logger.warning("Connection error fetching %s", url)
+        return None

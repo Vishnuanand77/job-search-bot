@@ -18,15 +18,14 @@ No `.env` required. Makes no AI API calls. Tests HTTP and Playwright only.
 
 ## Add your target URLs
 
-Edit the `PROBE_URLS` list at the top of `scripts/probe_sites.py`:
+Either pass URLs directly on the command line:
 
-```python
-PROBE_URLS: list[tuple[str, str]] = [
-    ("Stripe", "https://stripe.com/jobs/search"),
-    ("American Express", "https://aexp.eightfold.ai/careers?domain=aexp.com"),
-    # add all 10 targets here
-]
+```bash
+uv run python scripts/probe_sites.py https://stripe.com/jobs/search https://example.com/careers
 ```
+
+Or add them to `config/targets.yaml` and run without arguments — the probe
+reads all entries automatically.
 
 ---
 
@@ -43,25 +42,23 @@ For each URL:
 ## Reading the output
 
 ```
-sites:
-  - name: Stripe
-    url: https://stripe.com/jobs/search
-    scrape_tier: http          # http:12400 pw:0 chars
+────────────────────────────────────────────────────────────
+  Stripe
+  https://stripe.com/jobs/search
+────────────────────────────────────────────────────────────
+  [HTTP] ✓ 200 (1.2s)
+  [Playwright] ✓ content received (4.3s)
 
-  - name: American Express
-    url: https://aexp.eightfold.ai/careers?domain=aexp.com
-    scrape_tier: playwright    # http:0 pw:8200 chars
-
-  - name: Broken Site
-    url: https://example.com/jobs
-    scrape_tier: playwright    # ⚠ WARNING: only 180 chars — may be blocked
+  → Recommended scrape_tier: http
+    - name: Stripe
+      url: https://stripe.com/jobs/search
+      scrape_tier: http
 ```
 
-Paste the output directly into `config/targets.yaml`.
+Copy the YAML block directly into `config/targets.yaml`.
 
-Sites with ⚠ WARNING returned very little content. This means the site
-may use bot detection, require login, or the URL is wrong. Verify the URL
-shows job listings in your browser before including it.
+If both tiers fail, the site may use bot detection, require login, or
+the URL may be wrong. Verify in your browser before including it.
 
 ---
 
