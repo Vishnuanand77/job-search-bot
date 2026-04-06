@@ -10,7 +10,7 @@ from job_scout.models import JobPosting
 logger = logging.getLogger(__name__)
 
 MODEL = "claude-haiku-4-5"
-MAX_TOKENS = 8192
+MAX_TOKENS = 4096
 MAX_JOBS = 50
 TOKEN_BUDGET = 150_000  # estimated tokens; skip call if exceeded
 
@@ -50,7 +50,7 @@ async def extract_jobs(
     content: str,
     company_name: str,
     site_url: str,
-    client: anthropic.Anthropic,
+    client: anthropic.AsyncAnthropic,
 ) -> tuple[list[JobPosting], float]:
     if not content:
         return [], 0.0
@@ -58,7 +58,7 @@ async def extract_jobs(
     estimated_tokens = len(content) // 4
     logger.debug("Content for %s: ~%d estimated tokens", company_name, estimated_tokens)
     if estimated_tokens > TOKEN_BUDGET:
-        logger.error(
+        logger.warning(
             "Content for %s is too large (%d estimated tokens) — skipping extraction",
             company_name,
             estimated_tokens,
@@ -67,8 +67,9 @@ async def extract_jobs(
 
     user_message = f"Company: {company_name}\nSite URL: {site_url}\n\n{content}"
 
+    cost = 0.0
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,

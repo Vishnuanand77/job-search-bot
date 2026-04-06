@@ -237,6 +237,19 @@ async def test_dry_run_logs_formatted_message(caplog: pytest.LogCaptureFixture) 
 
 
 @pytest.mark.asyncio
+async def test_logs_error_when_telegram_returns_http_error(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+    summary = make_summary(matches=[make_match()])
+    with respx.mock:
+        respx.post("https://api.telegram.org/botTEST_TOKEN/sendMessage").mock(
+            return_value=httpx.Response(429)
+        )
+        with caplog.at_level(logging.ERROR, logger="job_scout.notifier.telegram"):
+            await send_digest(summary, bot_token="TEST_TOKEN", chat_id="123")
+    assert any("429" in r.message or "http error" in r.message.lower() for r in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_send_failure_alert_posts_to_telegram() -> None:
     error = RuntimeError("database connection failed")
     with respx.mock:

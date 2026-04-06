@@ -1,7 +1,7 @@
 import json
 import logging
 from hashlib import sha256
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -15,7 +15,7 @@ def _make_client(response_text: str) -> MagicMock:
     message.content = [MagicMock(text=response_text)]
     message.usage.input_tokens = 100
     message.usage.output_tokens = 50
-    client.messages.create.return_value = message
+    client.messages.create = AsyncMock(return_value=message)
     return client
 
 

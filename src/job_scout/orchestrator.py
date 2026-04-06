@@ -24,7 +24,7 @@ CONCURRENCY_LIMIT = 3
 async def _process_site(
     target: SiteTarget,
     config: AppConfig,
-    anthropic_client: anthropic.Anthropic,
+    anthropic_client: anthropic.AsyncAnthropic,
     store: JobStore,
     http_client: httpx.AsyncClient,
     semaphore: asyncio.Semaphore,
@@ -85,12 +85,13 @@ async def _process_site(
 
         except Exception as exc:
             logger.error("[%s] unexpected error: %s", target.name, exc)
-            await send_failure_alert(
-                error=exc,
-                context=f"processing {target.name}",
-                bot_token=config.telegram_bot_token,
-                chat_id=config.telegram_chat_id,
-            )
+            if not config.dry_run:
+                await send_failure_alert(
+                    error=exc,
+                    context=f"processing {target.name}",
+                    bot_token=config.telegram_bot_token,
+                    chat_id=config.telegram_chat_id,
+                )
             store.update_site_health(target.name, 0)
             return SiteResult(
                 site_name=target.name,
@@ -104,7 +105,7 @@ async def _process_site(
 
 
 async def run(config: AppConfig) -> RunSummary:
-    anthropic_client = anthropic.Anthropic(api_key=config.anthropic_api_key)
+    anthropic_client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
     supabase_client = create_client(config.supabase_url, config.supabase_key)
     store = JobStore(supabase_client)
     semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
@@ -133,11 +134,8 @@ async def run(config: AppConfig) -> RunSummary:
     sites_failed = sum(1 for r in results if r.error)
     sites_succeeded = len(results) - sites_failed
 
-    stale_sites = {
-        r.site_name: store.get_consecutive_zeros(r.site_name)
-        for r in results
-        if store.get_consecutive_zeros(r.site_name) >= 3
-    }
+    consecutive_zeros = {r.site_name: store.get_consecutive_zeros(r.site_name) for r in results}
+    stale_sites = {name: zeros for name, zeros in consecutive_zeros.items() if zeros >= 3}
 
     summary = RunSummary(
         run_at=datetime.now(timezone.utc),

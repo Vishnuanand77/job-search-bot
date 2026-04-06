@@ -1,6 +1,6 @@
 import json
 from datetime import date
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -46,7 +46,7 @@ def make_claude_response(payload: dict) -> MagicMock:
 
 def make_client(payload: dict) -> MagicMock:
     client = MagicMock()
-    client.messages.create.return_value = make_claude_response(payload)
+    client.messages.create = AsyncMock(return_value=make_claude_response(payload))
     return client
 
 
@@ -103,8 +103,10 @@ async def test_selects_correct_resume_profile_by_filename() -> None:
 async def test_returns_none_on_json_parse_failure() -> None:
     message = MagicMock()
     message.content = [MagicMock(text="not valid json {{{")]
+    message.usage.input_tokens = 100
+    message.usage.output_tokens = 50
     client = MagicMock()
-    client.messages.create.return_value = message
+    client.messages.create = AsyncMock(return_value=message)
     result, cost = await match_job(make_job(), make_resumes(), client, threshold=0.70)
     assert result is None
 

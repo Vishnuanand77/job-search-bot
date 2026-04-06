@@ -43,7 +43,7 @@ but absent from the best resume. Only genuinely important gaps.\
 async def match_job(
     job: JobPosting,
     resumes: list[ResumeProfile],
-    client: anthropic.Anthropic,
+    client: anthropic.AsyncAnthropic,
     threshold: float,
 ) -> tuple[MatchResult | None, float]:
     resume_index = {r.filename: r for r in resumes}
@@ -56,8 +56,9 @@ async def match_job(
         f"--- Job Description ---\n{job.description}\n\n{resume_sections}"
     )
 
+    cost = 0.0
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,
@@ -71,9 +72,9 @@ async def match_job(
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         data = json.loads(raw)
-    except (json.JSONDecodeError, Exception) as exc:
+    except json.JSONDecodeError as exc:
         logger.warning("match_job: failed to parse Claude response: %s", exc)
-        return None, 0.0
+        return None, cost
 
     best_filename: str = data.get("best_resume_filename", "")
     best_resume = resume_index.get(best_filename)

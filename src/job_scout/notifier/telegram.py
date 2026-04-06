@@ -161,7 +161,11 @@ async def _post(
         json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
         timeout=10.0,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        logger.error("Telegram HTTP error %s posting message: %s", exc.response.status_code, exc)
+        return
     data = response.json()
     if not data.get("ok"):
         logger.error(
