@@ -18,6 +18,8 @@ def format_digest(
 ) -> list[str]:
     time_str = summary.run_at.strftime("%Y-%m-%d %H:%M")
 
+    cost_str = f"${summary.total_cost_usd:.4f}"
+
     if not summary.matches:
         text = (
             f"✅ <b>Job Scout — no new matches</b>\n"
@@ -25,7 +27,8 @@ def format_digest(
             f"📊 Sites: {summary.sites_attempted} · "
             f"Jobs: {summary.total_jobs_found} · "
             f"New: {summary.new_jobs} · "
-            f"Matches: 0"
+            f"Matches: 0\n"
+            f"💰 Cost: {cost_str}"
         )
         if stale_sites:
             text += _stale_warnings(stale_sites)
@@ -49,6 +52,7 @@ def format_digest(
         f"Jobs: {summary.total_jobs_found} found · "
         f"{summary.new_jobs} new · "
         f"{len(summary.matches)} matches",
+        f"💰 Cost: {cost_str}",
     ]
     for err in summary.errors:
         footer_lines.append(f"⚠️ Failed: {err}")
