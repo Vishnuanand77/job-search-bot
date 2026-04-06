@@ -117,4 +117,4 @@ create table site_health (
 
 ## Status
 
-**Phase 5 complete** — Supabase deduplication store is implemented and tested. `JobStore` tracks every seen job by `dedup_key` (job ID or URL hash), records match scores, and maintains per-site health counters used to detect stale scrapers. Matching and notification are in progress.
+**Phase 6 complete** — Claude Sonnet 4.6 resume matcher is implemented and tested. `match_job` scores each new job against all loaded resumes, selects the best fit, identifies missing keywords, and returns `None` for below-threshold matches. Full job description and full resume content are passed with no truncation. Notification is in progress.
