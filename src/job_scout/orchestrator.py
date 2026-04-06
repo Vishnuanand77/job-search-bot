@@ -46,17 +46,19 @@ async def _process_site(
                     scraper_tier_used="none",
                 )
 
-            jobs = await extract_jobs(text, target.name, target.url, anthropic_client)
+            jobs, extract_cost = await extract_jobs(text, target.name, target.url, anthropic_client)
             store.update_site_health(target.name, len(jobs))
 
             new_jobs: int = 0
+            site_cost: float = extract_cost
             site_matches: list[MatchResult] = []
 
             for job in jobs:
                 if not store.is_new(job):
                     continue
                 new_jobs += 1
-                result = await match_job(job, config.resumes, anthropic_client, config.match_threshold)
+                result, match_cost = await match_job(job, config.resumes, anthropic_client, config.match_threshold)
+                site_cost += match_cost
                 store.mark_seen(job, match_result=result)
                 if result is not None:
                     site_matches.append(result)
@@ -78,6 +80,7 @@ async def _process_site(
                 matches=site_matches,
                 error=None,
                 scraper_tier_used=tier_used,
+                cost_usd=site_cost,
             )
 
         except Exception as exc:
@@ -117,10 +120,12 @@ async def run(config: AppConfig) -> RunSummary:
     errors: list[str] = []
     total_jobs = 0
     total_new = 0
+    total_cost: float = 0.0
 
     for r in results:
         total_jobs += r.jobs_found
         total_new += r.new_jobs
+        total_cost += r.cost_usd
         all_matches.extend(r.matches)
         if r.error:
             errors.append(f"{r.site_name} — {r.error}")
@@ -143,6 +148,7 @@ async def run(config: AppConfig) -> RunSummary:
         new_jobs=total_new,
         matches=all_matches,
         errors=errors,
+        total_cost_usd=total_cost,
     )
 
     await send_digest(

@@ -79,9 +79,9 @@ async def test_processes_all_sites_in_config() -> None:
         patch("job_scout.orchestrator.anthropic.Anthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
-        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=jobs),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=(jobs, 0.0)),
         patch("job_scout.orchestrator.JobStore") as MockStore,
-        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=None),
+        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=(None, 0.0)),
         patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
     ):
         store = MockStore.return_value
@@ -112,7 +112,7 @@ async def test_site_error_does_not_abort_other_sites() -> None:
         patch("job_scout.orchestrator.anthropic.Anthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", side_effect=fetch_side_effect),
-        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=[]),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
         patch("job_scout.orchestrator.JobStore") as MockStore,
         patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
     ):
@@ -135,7 +135,7 @@ async def test_skips_jobs_already_in_dedup_store() -> None:
         patch("job_scout.orchestrator.anthropic.Anthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
-        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=jobs),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=(jobs, 0.0)),
         patch("job_scout.orchestrator.JobStore") as MockStore,
         patch("job_scout.orchestrator.match_job", new_callable=AsyncMock) as mock_match,
         patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
@@ -158,9 +158,9 @@ async def test_marks_all_new_jobs_as_seen_not_just_matches() -> None:
         patch("job_scout.orchestrator.anthropic.Anthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
-        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=jobs),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=(jobs, 0.0)),
         patch("job_scout.orchestrator.JobStore") as MockStore,
-        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=None),
+        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=(None, 0.0)),
         patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
     ):
         store = MockStore.return_value
@@ -182,9 +182,9 @@ async def test_marks_matching_jobs_with_score() -> None:
         patch("job_scout.orchestrator.anthropic.Anthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
-        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=[job]),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([job], 0.0)),
         patch("job_scout.orchestrator.JobStore") as MockStore,
-        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=match),
+        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=(match, 0.0)),
         patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
     ):
         store = MockStore.return_value
@@ -204,7 +204,7 @@ async def test_sends_digest_after_all_sites_processed() -> None:
         patch("job_scout.orchestrator.anthropic.Anthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
-        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=[]),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
         patch("job_scout.orchestrator.JobStore") as MockStore,
         patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock) as mock_send,
     ):
@@ -224,7 +224,7 @@ async def test_dry_run_skips_telegram_send() -> None:
         patch("job_scout.orchestrator.anthropic.Anthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
-        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=[]),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
         patch("job_scout.orchestrator.JobStore") as MockStore,
         patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock) as mock_send,
     ):
@@ -246,13 +246,13 @@ async def test_run_summary_counts_are_accurate() -> None:
     match = make_match(job_with_match)
 
     async def match_side_effect(job, *args, **kwargs):
-        return match if job.job_id == "job-001" else None
+        return (match, 0.0) if job.job_id == "job-001" else (None, 0.0)
 
     with (
         patch("job_scout.orchestrator.anthropic.Anthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
-        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=jobs),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=(jobs, 0.0)),
         patch("job_scout.orchestrator.JobStore") as MockStore,
         patch("job_scout.orchestrator.match_job", side_effect=match_side_effect),
         patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
@@ -289,7 +289,7 @@ async def test_respects_concurrency_limit_of_3() -> None:
         patch("job_scout.orchestrator.anthropic.Anthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", side_effect=slow_fetch),
-        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=[]),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
         patch("job_scout.orchestrator.JobStore") as MockStore,
         patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
     ):
