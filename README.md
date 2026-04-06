@@ -95,4 +95,4 @@ The workflow in `.github/workflows/scout.yml` runs every hour. Add the required 
 
 ## Status
 
-**Phase 3 complete** — two-tier scraper (HTTP → Playwright fallback), HTML cleaning, and probe tool are implemented and tested. All 7 target sites probed and confirmed. Extraction, matching, and notification are in progress.
+**Phase 4 complete** — Claude Haiku job extractor is implemented and tested. Extracts structured `JobPosting` objects from raw scraped text, resolves relative URLs, caps at 50 jobs per site, and handles all parse failures gracefully. Matching and notification are in progress.
