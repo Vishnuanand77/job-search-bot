@@ -9,3 +9,4 @@ htmlcov/
 .venv/
 dist/
 *.egg-info/
+.coverage
