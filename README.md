@@ -117,4 +117,4 @@ create table site_health (
 
 ## Status
 
-**Phase 6 complete** — Claude Sonnet 4.6 resume matcher is implemented and tested. `match_job` scores each new job against all loaded resumes, selects the best fit, identifies missing keywords, and returns `None` for below-threshold matches. Full job description and full resume content are passed with no truncation. Notification is in progress.
+**Phase 7 complete** — Telegram notifier is implemented and tested. `send_digest` formats and sends a grouped-by-company HTML digest with match scores, missing keywords, and runner-up info. `send_failure_alert` fires immediately on any unhandled exception. Both respect dry-run mode. Long digests split at company boundaries to stay under Telegram's 4096-char limit. Orchestrator is in progress.
