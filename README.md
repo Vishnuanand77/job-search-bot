@@ -117,4 +117,4 @@ create table site_health (
 
 ## Status
 
-**Phase 7 complete** — Telegram notifier is implemented and tested. `send_digest` formats and sends a grouped-by-company HTML digest with match scores, missing keywords, and runner-up info. `send_failure_alert` fires immediately on any unhandled exception. Both respect dry-run mode. Long digests split at company boundaries to stay under Telegram's 4096-char limit. Orchestrator is in progress.
+**Phase 8 complete** — Orchestrator wires all components together. `run()` processes all configured sites concurrently (semaphore of 3), extracts jobs via Claude Haiku, deduplicates against Supabase, scores new jobs via Claude Sonnet, marks all new jobs as seen, and sends a Telegram digest. Per-site errors are isolated and don't abort the run. `main()` handles startup failures with an immediate Telegram alert and exits with code 1 if any site failed.

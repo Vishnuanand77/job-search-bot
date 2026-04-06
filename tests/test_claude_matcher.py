@@ -39,6 +39,8 @@ def make_resumes() -> list[ResumeProfile]:
 def make_claude_response(payload: dict) -> MagicMock:
     message = MagicMock()
     message.content = [MagicMock(text=json.dumps(payload))]
+    message.usage.input_tokens = 500
+    message.usage.output_tokens = 100
     return message
 
 
@@ -59,7 +61,7 @@ async def test_returns_match_result_when_score_meets_threshold() -> None:
         "runner_up_score": 0.72,
     }
     client = make_client(payload)
-    result = await match_job(make_job(), make_resumes(), client, threshold=0.70)
+    result, cost = await match_job(make_job(), make_resumes(), client, threshold=0.70)
     assert isinstance(result, MatchResult)
     assert result.best_score == 0.85
 
@@ -75,7 +77,7 @@ async def test_returns_none_when_score_below_threshold() -> None:
         "runner_up_score": None,
     }
     client = make_client(payload)
-    result = await match_job(make_job(), make_resumes(), client, threshold=0.70)
+    result, cost = await match_job(make_job(), make_resumes(), client, threshold=0.70)
     assert result is None
 
 
@@ -90,7 +92,7 @@ async def test_selects_correct_resume_profile_by_filename() -> None:
         "runner_up_score": 0.65,
     }
     client = make_client(payload)
-    result = await match_job(make_job(), make_resumes(), client, threshold=0.70)
+    result, cost = await match_job(make_job(), make_resumes(), client, threshold=0.70)
     assert result is not None
     assert result.best_resume.filename == "software_engineer_ai.md"
     assert result.runner_up_resume is not None
@@ -103,7 +105,7 @@ async def test_returns_none_on_json_parse_failure() -> None:
     message.content = [MagicMock(text="not valid json {{{")]
     client = MagicMock()
     client.messages.create.return_value = message
-    result = await match_job(make_job(), make_resumes(), client, threshold=0.70)
+    result, cost = await match_job(make_job(), make_resumes(), client, threshold=0.70)
     assert result is None
 
 
@@ -118,7 +120,7 @@ async def test_missing_keywords_is_a_list_of_strings() -> None:
         "runner_up_score": None,
     }
     client = make_client(payload)
-    result = await match_job(make_job(), make_resumes(), client, threshold=0.70)
+    result, cost = await match_job(make_job(), make_resumes(), client, threshold=0.70)
     assert result is not None
     assert result.missing_keywords == ["Kubernetes", "Ray", "Triton"]
 
@@ -135,7 +137,7 @@ async def test_runner_up_is_none_when_only_one_resume() -> None:
     }
     client = make_client(payload)
     single_resume = [make_resumes()[0]]
-    result = await match_job(make_job(), single_resume, client, threshold=0.70)
+    result, cost = await match_job(make_job(), single_resume, client, threshold=0.70)
     assert result is not None
     assert result.runner_up_resume is None
     assert result.runner_up_score is None
@@ -152,7 +154,7 @@ async def test_returns_none_when_filename_not_in_loaded_resumes() -> None:
         "runner_up_score": None,
     }
     client = make_client(payload)
-    result = await match_job(make_job(), make_resumes(), client, threshold=0.70)
+    result, cost = await match_job(make_job(), make_resumes(), client, threshold=0.70)
     assert result is None
 
 

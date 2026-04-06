@@ -10,8 +10,13 @@ from job_scout.models import JobPosting
 logger = logging.getLogger(__name__)
 
 MODEL = "claude-haiku-4-5"
-MAX_TOKENS = 4096
+MAX_TOKENS = 8192
 MAX_JOBS = 50
+TOKEN_BUDGET = 150_000  # estimated tokens; skip call if exceeded
+
+# Pricing per token (USD) — verify at https://anthropic.com/pricing
+HAIKU_INPUT_COST_PER_TOKEN = 0.80 / 1_000_000
+HAIKU_OUTPUT_COST_PER_TOKEN = 4.00 / 1_000_000
 
 SYSTEM_PROMPT = """\
 You are a job listing extractor. You receive the text content of a company
@@ -46,9 +51,19 @@ async def extract_jobs(
     company_name: str,
     site_url: str,
     client: anthropic.Anthropic,
-) -> list[JobPosting]:
+) -> tuple[list[JobPosting], float]:
     if not content:
-        return []
+        return [], 0.0
+
+    estimated_tokens = len(content) // 4
+    logger.debug("Content for %s: ~%d estimated tokens", company_name, estimated_tokens)
+    if estimated_tokens > TOKEN_BUDGET:
+        logger.error(
+            "Content for %s is too large (%d estimated tokens) — skipping extraction",
+            company_name,
+            estimated_tokens,
+        )
+        return [], 0.0
 
     user_message = f"Company: {company_name}\nSite URL: {site_url}\n\n{content}"
 
@@ -59,11 +74,17 @@ async def extract_jobs(
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
         )
-        raw = response.content[0].text
+        cost = (
+            response.usage.input_tokens * HAIKU_INPUT_COST_PER_TOKEN
+            + response.usage.output_tokens * HAIKU_OUTPUT_COST_PER_TOKEN
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         logger.warning("JSON parse failure extracting jobs for %s: %s", company_name, exc)
-        return []
+        return [], 0.0
 
     raw_jobs: list[dict] = data.get("jobs", [])
 
@@ -93,7 +114,7 @@ async def extract_jobs(
             )
         )
 
-    return postings
+    return postings, cost
 
 
 def _resolve_url(url: str, base_url: str) -> str:

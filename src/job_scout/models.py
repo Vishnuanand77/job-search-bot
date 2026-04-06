@@ -59,6 +59,7 @@ class SiteResult:
     matches: list[MatchResult]
     error: str | None
     scraper_tier_used: str
+    cost_usd: float = 0.0
 
 
 @dataclass
@@ -71,3 +72,4 @@ class RunSummary:
     new_jobs: int
     matches: list[MatchResult]
     errors: list[str]
+    total_cost_usd: float = 0.0
