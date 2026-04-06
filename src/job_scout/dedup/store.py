@@ -48,8 +48,9 @@ class JobStore:
         record: dict = {
             "site_name": site_name,
             "consecutive_zeros": new_zeros,
-            "last_success_at": datetime.now(timezone.utc).isoformat() if job_count > 0 else None,
         }
+        if job_count > 0:
+            record["last_success_at"] = datetime.now(timezone.utc).isoformat()
         result = self._client.table(SITE_HEALTH_TABLE).upsert(record).execute()
         if not result.data:
             logger.error("update_site_health: upsert returned no data for site=%s", site_name)

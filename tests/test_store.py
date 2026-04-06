@@ -155,6 +155,15 @@ def test_update_site_health_resets_zeros_on_non_empty_result() -> None:
     assert data["consecutive_zeros"] == 0
 
 
+def test_update_site_health_does_not_overwrite_last_success_at_on_failure() -> None:
+    client = _make_client_for_site_health(consecutive_zeros=1)
+    store = JobStore(client)
+    store.update_site_health("Example Corp", job_count=0)
+    call_args = client.table.return_value.upsert.call_args
+    data = call_args[0][0]
+    assert "last_success_at" not in data
+
+
 # --- get_consecutive_zeros ---
 
 def test_get_consecutive_zeros_returns_0_for_unknown_site() -> None:
