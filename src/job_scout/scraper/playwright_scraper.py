@@ -19,7 +19,7 @@ async def fetch_html_with_browser(url: str) -> str | None:
                     user_agent=BROWSER_HEADERS["User-Agent"]
                 )
                 page = await context.new_page()
-                await page.goto(url)
+                await page.goto(url, timeout=NETWORKIDLE_TIMEOUT)
                 await page.wait_for_load_state(
                     "networkidle", timeout=NETWORKIDLE_TIMEOUT
                 )
