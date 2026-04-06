@@ -114,7 +114,3 @@ create table site_health (
   last_success_at timestamptz
 );
 ```
-
-## Status
-
-**Phase 8 complete** — Orchestrator wires all components together. `run()` processes all configured sites concurrently (semaphore of 3), extracts jobs via Claude Haiku, deduplicates against Supabase, scores new jobs via Claude Sonnet, marks all new jobs as seen, and sends a Telegram digest. Per-site errors are isolated and don't abort the run. `main()` handles startup failures with an immediate Telegram alert and exits with code 1 if any site failed.
