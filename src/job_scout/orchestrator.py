@@ -134,11 +134,8 @@ async def run(config: AppConfig) -> RunSummary:
     sites_failed = sum(1 for r in results if r.error)
     sites_succeeded = len(results) - sites_failed
 
-    stale_sites = {
-        r.site_name: store.get_consecutive_zeros(r.site_name)
-        for r in results
-        if store.get_consecutive_zeros(r.site_name) >= 3
-    }
+    consecutive_zeros = {r.site_name: store.get_consecutive_zeros(r.site_name) for r in results}
+    stale_sites = {name: zeros for name, zeros in consecutive_zeros.items() if zeros >= 3}
 
     summary = RunSummary(
         run_at=datetime.now(timezone.utc),
