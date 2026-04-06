@@ -93,6 +93,28 @@ uv run pytest --cov=src --cov-report=html
 
 The workflow in `.github/workflows/scout.yml` runs every hour. Add the required secrets under **Settings → Secrets → Actions** in your repository.
 
+## Supabase setup
+
+Phase 5 requires two tables in your Supabase project. Run this SQL in the Supabase SQL editor:
+
+```sql
+create table seen_jobs (
+  dedup_key text primary key,
+  dedup_type text not null,
+  title text,
+  url text,
+  company text,
+  match_score float,
+  seen_at timestamptz default now()
+);
+
+create table site_health (
+  site_name text primary key,
+  consecutive_zeros int not null default 0,
+  last_success_at timestamptz
+);
+```
+
 ## Status
 
-**Phase 4 complete** — Claude Haiku job extractor is implemented and tested. Extracts structured `JobPosting` objects from raw scraped text, resolves relative URLs, caps at 50 jobs per site, and handles all parse failures gracefully. Matching and notification are in progress.
+**Phase 5 complete** — Supabase deduplication store is implemented and tested. `JobStore` tracks every seen job by `dedup_key` (job ID or URL hash), records match scores, and maintains per-site health counters used to detect stale scrapers. Matching and notification are in progress.
