@@ -67,6 +67,7 @@ async def extract_jobs(
 
     user_message = f"Company: {company_name}\nSite URL: {site_url}\n\n{content}"
 
+    cost = 0.0
     try:
         response = await client.messages.create(
             model=MODEL,

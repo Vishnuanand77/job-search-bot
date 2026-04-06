@@ -56,6 +56,7 @@ async def match_job(
         f"--- Job Description ---\n{job.description}\n\n{resume_sections}"
     )
 
+    cost = 0.0
     try:
         response = await client.messages.create(
             model=MODEL,
