@@ -39,7 +39,7 @@ async def test_falls_back_to_playwright_when_http_returns_none():
         with patch(
             "job_scout.scraper.dispatcher.fetch_html_with_browser",
             new=AsyncMock(return_value=playwright_html),
-        ):
+        ), patch("job_scout.scraper.dispatcher.asyncio.sleep", new=AsyncMock()):
             async with httpx.AsyncClient() as client:
                 text, tier = await fetch_site_content(make_http_target(), client)
 
@@ -56,7 +56,7 @@ async def test_raises_scraping_failed_when_both_tiers_fail():
         with patch(
             "job_scout.scraper.dispatcher.fetch_html_with_browser",
             new=AsyncMock(return_value=None),
-        ):
+        ), patch("job_scout.scraper.dispatcher.asyncio.sleep", new=AsyncMock()):
             async with httpx.AsyncClient() as client:
                 with pytest.raises(ScrapingFailedError):
                     await fetch_site_content(make_http_target(), client)

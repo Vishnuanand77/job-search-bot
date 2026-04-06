@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import random
 import re
 
 import httpx
@@ -36,6 +38,7 @@ async def fetch_site_content(
         if html is not None:
             return _clean_html(html), "http"
         logger.info("HTTP failed for %s, falling back to Playwright", target.name)
+        await asyncio.sleep(random.uniform(1, 3))
 
     html = await fetch_html_with_browser(target.url)
     if html is not None:
