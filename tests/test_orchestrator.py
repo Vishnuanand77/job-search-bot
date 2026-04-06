@@ -321,3 +321,4 @@ async def test_sends_failure_alert_on_unhandled_exception() -> None:
     # Per-site exceptions are caught — failure alert fires for each site that errors unrecoverably
     # The run itself should complete (not propagate)
     assert summary.sites_failed > 0
+    mock_alert.assert_called()
