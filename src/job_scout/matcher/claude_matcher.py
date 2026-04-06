@@ -10,6 +10,10 @@ logger = logging.getLogger(__name__)
 MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 2048
 
+# Pricing per token (USD) — verify at https://anthropic.com/pricing
+SONNET_INPUT_COST_PER_TOKEN = 3.00 / 1_000_000
+SONNET_OUTPUT_COST_PER_TOKEN = 15.00 / 1_000_000
+
 SYSTEM_PROMPT = """\
 You are an expert technical recruiter evaluating resume-to-job fit.
 You will receive a complete job description and multiple resumes.
@@ -41,7 +45,7 @@ async def match_job(
     resumes: list[ResumeProfile],
     client: anthropic.Anthropic,
     threshold: float,
-) -> MatchResult | None:
+) -> tuple[MatchResult | None, float]:
     resume_index = {r.filename: r for r in resumes}
 
     resume_sections = "\n\n".join(
@@ -59,11 +63,17 @@ async def match_job(
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
         )
-        raw = response.content[0].text
+        cost = (
+            response.usage.input_tokens * SONNET_INPUT_COST_PER_TOKEN
+            + response.usage.output_tokens * SONNET_OUTPUT_COST_PER_TOKEN
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         data = json.loads(raw)
     except (json.JSONDecodeError, Exception) as exc:
         logger.warning("match_job: failed to parse Claude response: %s", exc)
-        return None
+        return None, 0.0
 
     best_filename: str = data.get("best_resume_filename", "")
     best_resume = resume_index.get(best_filename)
@@ -72,11 +82,11 @@ async def match_job(
             "match_job: best_resume_filename '%s' not found in loaded resumes",
             best_filename,
         )
-        return None
+        return None, cost
 
     best_score: float = float(data.get("best_score", 0.0))
     if best_score < threshold:
-        return None
+        return None, cost
 
     runner_up_filename: str | None = data.get("runner_up_filename")
     runner_up_resume = resume_index.get(runner_up_filename) if runner_up_filename else None
@@ -91,4 +101,4 @@ async def match_job(
         missing_keywords=data.get("missing_keywords", []),
         runner_up_resume=runner_up_resume,
         runner_up_score=runner_up_score,
-    )
+    ), cost
