@@ -13,6 +13,8 @@ def _make_client(response_text: str) -> MagicMock:
     client = MagicMock()
     message = MagicMock()
     message.content = [MagicMock(text=response_text)]
+    message.usage.input_tokens = 100
+    message.usage.output_tokens = 50
     client.messages.create.return_value = message
     return client
 
@@ -46,12 +48,12 @@ async def test_returns_list_of_job_postings_on_valid_response():
     payload = json.dumps({"jobs": [_valid_job_json()]})
     client = _make_client(payload)
 
-    result = await extract_jobs("page content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("page content", "Acme", "https://example.com", client)
 
-    assert len(result) == 1
-    assert isinstance(result[0], JobPosting)
-    assert result[0].title == "Software Engineer"
-    assert result[0].company == "Acme"
+    assert len(jobs) == 1
+    assert isinstance(jobs[0], JobPosting)
+    assert jobs[0].title == "Software Engineer"
+    assert jobs[0].company == "Acme"
 
 
 # ---------------------------------------------------------------------------
@@ -62,9 +64,9 @@ async def test_returns_list_of_job_postings_on_valid_response():
 async def test_returns_empty_list_when_claude_returns_no_jobs():
     client = _make_client(json.dumps({"jobs": []}))
 
-    result = await extract_jobs("page content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("page content", "Acme", "https://example.com", client)
 
-    assert result == []
+    assert jobs == []
 
 
 # ---------------------------------------------------------------------------
@@ -75,9 +77,9 @@ async def test_returns_empty_list_when_claude_returns_no_jobs():
 async def test_returns_empty_list_on_json_parse_failure():
     client = _make_client("not valid json at all")
 
-    result = await extract_jobs("page content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("page content", "Acme", "https://example.com", client)
 
-    assert result == []
+    assert jobs == []
 
 
 # ---------------------------------------------------------------------------
@@ -103,10 +105,10 @@ async def test_dedup_key_set_to_job_id_when_present():
     payload = json.dumps({"jobs": [_valid_job_json(job_id="abc-999")]})
     client = _make_client(payload)
 
-    result = await extract_jobs("content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("content", "Acme", "https://example.com", client)
 
-    assert result[0].dedup_key == "abc-999"
-    assert result[0].dedup_type == "job_id"
+    assert jobs[0].dedup_key == "abc-999"
+    assert jobs[0].dedup_type == "job_id"
 
 
 # ---------------------------------------------------------------------------
@@ -119,11 +121,11 @@ async def test_dedup_key_set_to_url_hash_when_no_job_id():
     payload = json.dumps({"jobs": [_valid_job_json(url=url, job_id=None)]})
     client = _make_client(payload)
 
-    result = await extract_jobs("content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("content", "Acme", "https://example.com", client)
 
     expected = sha256(url.encode()).hexdigest()[:16]
-    assert result[0].dedup_key == expected
-    assert result[0].dedup_type == "url_hash"
+    assert jobs[0].dedup_key == expected
+    assert jobs[0].dedup_type == "url_hash"
 
 
 # ---------------------------------------------------------------------------
@@ -135,10 +137,10 @@ async def test_converts_relative_url_to_absolute():
     payload = json.dumps({"jobs": [_valid_job_json(url="/jobs/99")]})
     client = _make_client(payload)
 
-    result = await extract_jobs("content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("content", "Acme", "https://example.com", client)
 
-    assert result[0].url.startswith("https://example.com")
-    assert result[0].url == "https://example.com/jobs/99"
+    assert jobs[0].url.startswith("https://example.com")
+    assert jobs[0].url == "https://example.com/jobs/99"
 
 
 # ---------------------------------------------------------------------------
@@ -152,9 +154,9 @@ async def test_caps_results_at_50_and_logs_warning(caplog):
     client = _make_client(payload)
 
     with caplog.at_level(logging.WARNING, logger="job_scout.extractor.claude_extractor"):
-        result = await extract_jobs("content", "Acme", "https://example.com", client)
+        jobs, cost = await extract_jobs("content", "Acme", "https://example.com", client)
 
-    assert len(result) == 50
+    assert len(jobs) == 50
     assert any("50" in r.message or "cap" in r.message.lower() for r in caplog.records)
 
 
@@ -166,9 +168,9 @@ async def test_caps_results_at_50_and_logs_warning(caplog):
 async def test_returns_empty_list_on_empty_content():
     client = _make_client(json.dumps({"jobs": []}))
 
-    result = await extract_jobs("", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("", "Acme", "https://example.com", client)
 
-    assert result == []
+    assert jobs == []
 
 
 # ---------------------------------------------------------------------------
@@ -181,9 +183,9 @@ async def test_description_field_is_populated():
     payload = json.dumps({"jobs": [_valid_job_json(description=desc)]})
     client = _make_client(payload)
 
-    result = await extract_jobs("content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("content", "Acme", "https://example.com", client)
 
-    assert result[0].description == desc
+    assert jobs[0].description == desc
 
 
 # ---------------------------------------------------------------------------
@@ -197,9 +199,9 @@ async def test_handles_missing_url_in_job_entry():
     payload = json.dumps({"jobs": [job]})
     client = _make_client(payload)
 
-    result = await extract_jobs("content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("content", "Acme", "https://example.com", client)
 
-    assert result[0].url == "https://example.com"
+    assert jobs[0].url == "https://example.com"
 
 
 # ---------------------------------------------------------------------------
@@ -212,9 +214,9 @@ async def test_handles_invalid_posted_date_gracefully():
     payload = json.dumps({"jobs": [job]})
     client = _make_client(payload)
 
-    result = await extract_jobs("content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("content", "Acme", "https://example.com", client)
 
-    assert result[0].posted_date is None
+    assert jobs[0].posted_date is None
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +229,6 @@ async def test_handles_null_posted_date():
     payload = json.dumps({"jobs": [job]})
     client = _make_client(payload)
 
-    result = await extract_jobs("content", "Acme", "https://example.com", client)
+    jobs, cost = await extract_jobs("content", "Acme", "https://example.com", client)
 
-    assert result[0].posted_date is None
+    assert jobs[0].posted_date is None
