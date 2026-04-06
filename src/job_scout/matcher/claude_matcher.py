@@ -72,9 +72,9 @@ async def match_job(
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         data = json.loads(raw)
-    except (json.JSONDecodeError, Exception) as exc:
+    except json.JSONDecodeError as exc:
         logger.warning("match_job: failed to parse Claude response: %s", exc)
-        return None, 0.0
+        return None, cost
 
     best_filename: str = data.get("best_resume_filename", "")
     best_resume = resume_index.get(best_filename)
