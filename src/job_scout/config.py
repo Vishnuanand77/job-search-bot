@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 
 from job_scout.models import ResumeProfile, SiteTarget
 
@@ -37,6 +38,7 @@ class AppConfig:
 
 
 def load_config() -> AppConfig:
+    load_dotenv()
     anthropic_api_key = _require_env("ANTHROPIC_API_KEY")
     supabase_url = _require_env("SUPABASE_URL")
     supabase_key = _require_env("SUPABASE_KEY")

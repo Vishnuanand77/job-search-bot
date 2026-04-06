@@ -31,24 +31,60 @@ async def _process_site(
 ) -> SiteResult:
     async with semaphore:
         try:
-            text, tier_used = await fetch_site_content(target, http_client)
-        except ScrapingFailedError as exc:
-            logger.warning("[%s] scraping failed: %s", target.name, exc)
-            store.update_site_health(target.name, 0)
+            try:
+                text, tier_used = await fetch_site_content(target, http_client)
+            except ScrapingFailedError as exc:
+                logger.warning("[%s] scraping failed: %s", target.name, exc)
+                store.update_site_health(target.name, 0)
+                return SiteResult(
+                    site_name=target.name,
+                    url=target.url,
+                    jobs_found=0,
+                    new_jobs=0,
+                    matches=[],
+                    error=str(exc),
+                    scraper_tier_used="none",
+                )
+
+            jobs = await extract_jobs(text, target.name, target.url, anthropic_client)
+            store.update_site_health(target.name, len(jobs))
+
+            new_jobs: int = 0
+            site_matches: list[MatchResult] = []
+
+            for job in jobs:
+                if not store.is_new(job):
+                    continue
+                new_jobs += 1
+                result = await match_job(job, config.resumes, anthropic_client, config.match_threshold)
+                store.mark_seen(job, match_result=result)
+                if result is not None:
+                    site_matches.append(result)
+
+            logger.info(
+                "[%s] tier=%s jobs=%d new=%d matches=%d",
+                target.name,
+                tier_used,
+                len(jobs),
+                new_jobs,
+                len(site_matches),
+            )
+
             return SiteResult(
                 site_name=target.name,
                 url=target.url,
-                jobs_found=0,
-                new_jobs=0,
-                matches=[],
-                error=str(exc),
-                scraper_tier_used="none",
+                jobs_found=len(jobs),
+                new_jobs=new_jobs,
+                matches=site_matches,
+                error=None,
+                scraper_tier_used=tier_used,
             )
+
         except Exception as exc:
             logger.error("[%s] unexpected error: %s", target.name, exc)
             await send_failure_alert(
                 error=exc,
-                context=f"scraping {target.name}",
+                context=f"processing {target.name}",
                 bot_token=config.telegram_bot_token,
                 chat_id=config.telegram_chat_id,
             )
@@ -62,40 +98,6 @@ async def _process_site(
                 error=str(exc),
                 scraper_tier_used="none",
             )
-
-        jobs = await extract_jobs(text, target.name, target.url, anthropic_client)
-        store.update_site_health(target.name, len(jobs))
-
-        new_jobs: int = 0
-        site_matches: list[MatchResult] = []
-
-        for job in jobs:
-            if not store.is_new(job):
-                continue
-            new_jobs += 1
-            result = await match_job(job, config.resumes, anthropic_client, config.match_threshold)
-            store.mark_seen(job, match_result=result)
-            if result is not None:
-                site_matches.append(result)
-
-        logger.info(
-            "[%s] tier=%s jobs=%d new=%d matches=%d",
-            target.name,
-            tier_used,
-            len(jobs),
-            new_jobs,
-            len(site_matches),
-        )
-
-        return SiteResult(
-            site_name=target.name,
-            url=target.url,
-            jobs_found=len(jobs),
-            new_jobs=new_jobs,
-            matches=site_matches,
-            error=None,
-            scraper_tier_used=tier_used,
-        )
 
 
 async def run(config: AppConfig) -> RunSummary:

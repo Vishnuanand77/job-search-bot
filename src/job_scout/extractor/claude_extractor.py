@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 MODEL = "claude-haiku-4-5"
 MAX_TOKENS = 4096
 MAX_JOBS = 50
+TOKEN_BUDGET = 60_000  # estimated tokens; skip call if exceeded
 
 SYSTEM_PROMPT = """\
 You are a job listing extractor. You receive the text content of a company
@@ -48,6 +49,15 @@ async def extract_jobs(
     client: anthropic.Anthropic,
 ) -> list[JobPosting]:
     if not content:
+        return []
+
+    estimated_tokens = len(content) // 4
+    if estimated_tokens > TOKEN_BUDGET:
+        logger.error(
+            "Content for %s is too large (%d estimated tokens) — skipping extraction",
+            company_name,
+            estimated_tokens,
+        )
         return []
 
     user_message = f"Company: {company_name}\nSite URL: {site_url}\n\n{content}"
