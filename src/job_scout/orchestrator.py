@@ -24,7 +24,7 @@ CONCURRENCY_LIMIT = 3
 async def _process_site(
     target: SiteTarget,
     config: AppConfig,
-    anthropic_client: anthropic.Anthropic,
+    anthropic_client: anthropic.AsyncAnthropic,
     store: JobStore,
     http_client: httpx.AsyncClient,
     semaphore: asyncio.Semaphore,
@@ -104,7 +104,7 @@ async def _process_site(
 
 
 async def run(config: AppConfig) -> RunSummary:
-    anthropic_client = anthropic.Anthropic(api_key=config.anthropic_api_key)
+    anthropic_client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
     supabase_client = create_client(config.supabase_url, config.supabase_key)
     store = JobStore(supabase_client)
     semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)

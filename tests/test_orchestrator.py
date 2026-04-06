@@ -76,7 +76,7 @@ async def test_processes_all_sites_in_config() -> None:
     jobs = [make_job()]
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
         patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=(jobs, 0.0)),
@@ -109,7 +109,7 @@ async def test_site_error_does_not_abort_other_sites() -> None:
         return ("text", "http")
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", side_effect=fetch_side_effect),
         patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
@@ -132,7 +132,7 @@ async def test_skips_jobs_already_in_dedup_store() -> None:
     jobs = [make_job()]
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
         patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=(jobs, 0.0)),
@@ -155,7 +155,7 @@ async def test_marks_all_new_jobs_as_seen_not_just_matches() -> None:
     jobs = [make_job("AI Engineer", job_id="job-001"), make_job("Data Scientist", job_id="job-002")]
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
         patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=(jobs, 0.0)),
@@ -179,7 +179,7 @@ async def test_marks_matching_jobs_with_score() -> None:
     match = make_match(job)
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
         patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([job], 0.0)),
@@ -201,7 +201,7 @@ async def test_sends_digest_after_all_sites_processed() -> None:
     config = make_config()
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
         patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
@@ -221,7 +221,7 @@ async def test_dry_run_skips_telegram_send() -> None:
     config = make_config(dry_run=True)
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
         patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
@@ -249,7 +249,7 @@ async def test_run_summary_counts_are_accurate() -> None:
         return (match, 0.0) if job.job_id == "job-001" else (None, 0.0)
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
         patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=(jobs, 0.0)),
@@ -286,7 +286,7 @@ async def test_respects_concurrency_limit_of_3() -> None:
         return ("text", "http")
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", side_effect=slow_fetch),
         patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
@@ -306,7 +306,7 @@ async def test_sends_failure_alert_on_unhandled_exception() -> None:
     config = make_config()
 
     with (
-        patch("job_scout.orchestrator.anthropic.Anthropic"),
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
         patch("job_scout.orchestrator.create_client"),
         patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, side_effect=Exception("boom")),
         patch("job_scout.orchestrator.JobStore") as MockStore,

@@ -50,7 +50,7 @@ async def extract_jobs(
     content: str,
     company_name: str,
     site_url: str,
-    client: anthropic.Anthropic,
+    client: anthropic.AsyncAnthropic,
 ) -> tuple[list[JobPosting], float]:
     if not content:
         return [], 0.0
@@ -68,7 +68,7 @@ async def extract_jobs(
     user_message = f"Company: {company_name}\nSite URL: {site_url}\n\n{content}"
 
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,

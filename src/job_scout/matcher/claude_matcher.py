@@ -43,7 +43,7 @@ but absent from the best resume. Only genuinely important gaps.\
 async def match_job(
     job: JobPosting,
     resumes: list[ResumeProfile],
-    client: anthropic.Anthropic,
+    client: anthropic.AsyncAnthropic,
     threshold: float,
 ) -> tuple[MatchResult | None, float]:
     resume_index = {r.filename: r for r in resumes}
@@ -57,7 +57,7 @@ async def match_job(
     )
 
     try:
-        response = client.messages.create(
+        response = await client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,
