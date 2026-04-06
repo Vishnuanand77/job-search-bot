@@ -17,14 +17,14 @@ sites:
 
   # probe: HTTP 200 (0.7s) | Playwright ✓ (4.2s)
   # Note: eightfold.ai is a JS SPA — HTTP returns shell; revisit in Phase 4
-  - name: American Express
+  # - name: American Express
     url: https://aexp.eightfold.ai/careers?location=Charlotte%2C%20North%20Carolina%2C%20United%20States&Select%20Primary%20Career%20Areas=technology&Select%20Skills=Artificial%20Intelligence&domain=aexp.com&sort_by=relevance&hl=en&triggerGoButton=false&triggerGoButton=true&pid=40190760
     scrape_tier: http
 
   # probe: HTTP 200 (0.2s) | Playwright ✗ networkidle timeout (16s)
-  - name: Tiger Analytics
-    url: https://www.tigeranalytics.com/about-us/current-openings/
-    scrape_tier: http
+  # - name: Tiger Analytics
+  #   url: https://www.tigeranalytics.com/about-us/current-openings/
+  #   scrape_tier: http
 
   # probe: HTTP 200 (0.2s) | Playwright ✗ networkidle timeout (19.5s)
   # Note: JS SPA — HTTP returns shell; revisit in Phase 4 if extraction yields 0 jobs
@@ -34,6 +34,6 @@ sites:
 
   # probe: HTTP 200 (0.8s) | Playwright ✓ (4.5s)
   # Note: JS SPA — HTTP returns shell; revisit in Phase 4 if extraction yields 0 jobs
-  - name: Microsoft
-    url: https://apply.careers.microsoft.com/careers?start=0&location=United+States&pid=1970393556620220&sort_by=distance&filter_include_remote=1&filter_profession=software+engineering%2Cresearch%252C%2520applied%252C%2520%2526%2520data%2520sciences%2Canalytics&filter_seniority=Entry%2CSenior
-    scrape_tier: http
+  # - name: Microsoft
+  #   url: https://apply.careers.microsoft.com/careers?start=0&location=United+States&pid=1970393556620220&sort_by=distance&filter_include_remote=1&filter_profession=software+engineering%2Cresearch%252C%2520applied%252C%2520%2526%2520data%2520sciences%2Canalytics&filter_seniority=Entry%2CSenior
+  #   scrape_tier: http
