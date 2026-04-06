@@ -85,12 +85,13 @@ async def _process_site(
 
         except Exception as exc:
             logger.error("[%s] unexpected error: %s", target.name, exc)
-            await send_failure_alert(
-                error=exc,
-                context=f"processing {target.name}",
-                bot_token=config.telegram_bot_token,
-                chat_id=config.telegram_chat_id,
-            )
+            if not config.dry_run:
+                await send_failure_alert(
+                    error=exc,
+                    context=f"processing {target.name}",
+                    bot_token=config.telegram_bot_token,
+                    chat_id=config.telegram_chat_id,
+                )
             store.update_site_health(target.name, 0)
             return SiteResult(
                 site_name=target.name,
