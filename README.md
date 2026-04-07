@@ -107,7 +107,7 @@ uv run pytest --cov=src --cov-report=html
 
 ## GitHub Actions
 
-The workflow in `.github/workflows/scout.yml` runs every 2 hours. Add the required secrets under **Settings → Secrets → Actions** in your repository.
+The workflow in `.github/workflows/scout.yml` runs every 2 hours between 8 AM and 10 PM CST (14:00–04:00 UTC). Add the required secrets under **Settings → Secrets → Actions** in your repository.
 
 ## Supabase setup
 
