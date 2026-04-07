@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, time
 from hashlib import sha256
 
 
@@ -8,6 +8,9 @@ class SiteTarget:
     name: str
     url: str
     scrape_tier: str  # 'http' or 'playwright'
+    pagination_param: str | None = None  # query param name, e.g. "start"
+    pagination_step: int = 20            # increment per page
+    max_pages: int = 5                   # hard ceiling on pages fetched
 
 
 @dataclass
@@ -19,7 +22,8 @@ class JobPosting:
     snippet: str
     job_id: str | None
     posted_date: date | None
-    location: str | None
+    posted_time: time | None = None  # hour-level precision; scraped from <time datetime> or JSON-LD
+    location: str | None = None
     dedup_key: str = field(init=False)
     dedup_type: str = field(init=False)
 
