@@ -160,6 +160,101 @@ def test_raises_when_resume_directory_does_not_exist(
         load_config()
 
 
+# ── Pagination config tests ───────────────────────────────────────────────────
+
+def test_pagination_block_parsed_correctly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    targets_dir = tmp_path / "config"
+    targets_dir.mkdir()
+    (targets_dir / "targets.yaml").write_text(
+        "sites:\n"
+        "  - name: Test Corp\n"
+        "    url: https://test.com/jobs\n"
+        "    scrape_tier: http\n"
+        "    pagination:\n"
+        "      param: start\n"
+        "      step: 20\n"
+        "      max_pages: 5\n"
+    )
+    resumes_dir = tmp_path / "resumes"
+    resumes_dir.mkdir()
+    (resumes_dir / "resume.md").write_text("# Resume")
+    _set_env(monkeypatch, tmp_path, BASE_ENV)
+
+    config = load_config()
+    target = config.targets[0]
+
+    assert target.pagination_param == "start"
+    assert target.pagination_step == 20
+    assert target.max_pages == 5
+
+
+def test_pagination_defaults_when_block_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_valid_files(tmp_path)
+    _set_env(monkeypatch, tmp_path, BASE_ENV)
+
+    config = load_config()
+    target = config.targets[0]
+
+    assert target.pagination_param is None
+    assert target.pagination_step == 20
+    assert target.max_pages == 5
+
+
+def test_pagination_defaults_when_block_is_null(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    targets_dir = tmp_path / "config"
+    targets_dir.mkdir()
+    (targets_dir / "targets.yaml").write_text(
+        "sites:\n"
+        "  - name: Test Corp\n"
+        "    url: https://test.com/jobs\n"
+        "    scrape_tier: http\n"
+        "    pagination:\n"
+    )
+    resumes_dir = tmp_path / "resumes"
+    resumes_dir.mkdir()
+    (resumes_dir / "resume.md").write_text("# Resume")
+    _set_env(monkeypatch, tmp_path, BASE_ENV)
+
+    config = load_config()
+    target = config.targets[0]
+
+    assert target.pagination_param is None
+    assert target.pagination_step == 20
+    assert target.max_pages == 5
+
+
+def test_pagination_partial_block_uses_defaults_for_missing_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    targets_dir = tmp_path / "config"
+    targets_dir.mkdir()
+    (targets_dir / "targets.yaml").write_text(
+        "sites:\n"
+        "  - name: Test Corp\n"
+        "    url: https://test.com/jobs\n"
+        "    scrape_tier: http\n"
+        "    pagination:\n"
+        "      param: offset\n"
+    )
+    resumes_dir = tmp_path / "resumes"
+    resumes_dir.mkdir()
+    (resumes_dir / "resume.md").write_text("# Resume")
+    _set_env(monkeypatch, tmp_path, BASE_ENV)
+
+    config = load_config()
+    target = config.targets[0]
+
+    assert target.pagination_param == "offset"
+    assert target.pagination_step == 20
+    assert target.max_pages == 5
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _setup_valid_files(
