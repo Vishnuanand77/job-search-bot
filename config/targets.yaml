@@ -9,6 +9,10 @@ sites:
   - name: Wells Fargo
     url: https://www.wellsfargojobs.com/en/jobs/?search=&country=United+States+of+America&team=Data+%26+Analytics&team=Technology&pagesize=20#results
     scrape_tier: http
+    pagination:
+      param: start
+      step: 20
+      max_pages: 5
 
   # probe: HTTP 200 (0.7s) | Playwright ✓ (4.2s)
   # Note: eightfold.ai is a JS SPA — HTTP returns shell; revisit in Phase 4
