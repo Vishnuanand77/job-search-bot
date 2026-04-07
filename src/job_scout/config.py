@@ -91,10 +91,14 @@ def _load_targets(targets_file: Path) -> list[SiteTarget]:
                 f"Invalid scrape_tier '{tier}' for site '{entry['name']}'. "
                 f"Must be one of: {sorted(VALID_SCRAPE_TIERS)}"
             )
+        pagination = entry.get("pagination") or {}
         targets.append(SiteTarget(
             name=entry["name"],
             url=entry["url"],
             scrape_tier=tier,
+            pagination_param=pagination.get("param"),
+            pagination_step=pagination.get("step", 20),
+            max_pages=pagination.get("max_pages", 5),
         ))
 
     return targets

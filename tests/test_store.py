@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -178,3 +178,68 @@ def test_get_consecutive_zeros_returns_0_for_unknown_site() -> None:
     ) = execute_result
     store = JobStore(client)
     assert store.get_consecutive_zeros("Unknown Site") == 0
+
+
+# --- get_last_run_at ---
+
+def _make_client_for_last_run(*, last_success_at: str | None) -> MagicMock:
+    client = MagicMock()
+    execute_result = MagicMock()
+    if last_success_at is None:
+        execute_result.data = []
+    else:
+        execute_result.data = [{"last_success_at": last_success_at}]
+    (
+        client.table.return_value
+        .select.return_value
+        .eq.return_value
+        .execute.return_value
+    ) = execute_result
+    return client
+
+
+def test_get_last_run_at_returns_none_for_unknown_site() -> None:
+    client = _make_client_for_last_run(last_success_at=None)
+    store = JobStore(client)
+    assert store.get_last_run_at("Unknown") is None
+
+
+def test_get_last_run_at_returns_none_when_column_is_null() -> None:
+    client = MagicMock()
+    execute_result = MagicMock()
+    execute_result.data = [{"last_success_at": None}]
+    (
+        client.table.return_value
+        .select.return_value
+        .eq.return_value
+        .execute.return_value
+    ) = execute_result
+    store = JobStore(client)
+    assert store.get_last_run_at("Wells Fargo") is None
+
+
+def test_get_last_run_at_returns_aware_datetime_for_known_site() -> None:
+    ts = "2026-04-05T10:00:00+00:00"
+    client = _make_client_for_last_run(last_success_at=ts)
+    store = JobStore(client)
+    result = store.get_last_run_at("Wells Fargo")
+    assert result == datetime(2026, 4, 5, 10, 0, tzinfo=timezone.utc)
+
+
+def test_get_last_run_at_normalizes_naive_datetime_to_utc() -> None:
+    ts = "2026-04-05T10:00:00"  # no timezone
+    client = _make_client_for_last_run(last_success_at=ts)
+    store = JobStore(client)
+    result = store.get_last_run_at("Wells Fargo")
+    assert result is not None
+    assert result.tzinfo == timezone.utc
+    assert result == datetime(2026, 4, 5, 10, 0, tzinfo=timezone.utc)
+
+
+def test_get_last_run_at_queries_correct_site_name() -> None:
+    client = _make_client_for_last_run(last_success_at=None)
+    store = JobStore(client)
+    store.get_last_run_at("Capital One")
+    client.table.return_value.select.return_value.eq.assert_called_once_with(
+        "site_name", "Capital One"
+    )

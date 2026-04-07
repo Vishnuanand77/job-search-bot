@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date
+from datetime import date, time
 from urllib.parse import urljoin, urlparse
 
 import anthropic
@@ -32,6 +32,7 @@ Return ONLY valid JSON — no preamble, no explanation, no markdown fences:
       "description": "string — complete full text of the job description",
       "snippet": "string — 2-3 sentence summary of what this role does",
       "posted_date": "YYYY-MM-DD or null",
+      "posted_time": "HH:MM in 24-hour UTC format, or null — only populate if the text contains an explicit time value (ISO datetime or clock time); do NOT infer from relative phrases like '2h ago'",
       "location": "string or null"
     }
   ]
@@ -102,6 +103,7 @@ async def extract_jobs(
     for job in raw_jobs:
         url = _resolve_url(job.get("url", ""), site_url)
         posted_date = _parse_date(job.get("posted_date"))
+        posted_time = _parse_time(job.get("posted_time"))
         postings.append(
             JobPosting(
                 title=job.get("title", ""),
@@ -111,6 +113,7 @@ async def extract_jobs(
                 snippet=job.get("snippet", ""),
                 job_id=job.get("job_id") or None,
                 posted_date=posted_date,
+                posted_time=posted_time,
                 location=job.get("location"),
             )
         )
@@ -132,5 +135,14 @@ def _parse_date(value: str | None) -> date | None:
         return None
     try:
         return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _parse_time(value: str | None) -> time | None:
+    if not value:
+        return None
+    try:
+        return time.fromisoformat(value)
     except ValueError:
         return None

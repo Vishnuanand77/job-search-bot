@@ -11,7 +11,7 @@ from job_scout.models import (
     RunSummary,
     SiteTarget,
 )
-from job_scout.orchestrator import run
+from job_scout.orchestrator import _build_page_url, run
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +87,7 @@ async def test_processes_all_sites_in_config() -> None:
         store = MockStore.return_value
         store.is_new.return_value = True
         store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
 
         summary = await run(config)
 
@@ -118,6 +119,7 @@ async def test_site_error_does_not_abort_other_sites() -> None:
     ):
         store = MockStore.return_value
         store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
 
         summary = await run(config)
 
@@ -143,6 +145,7 @@ async def test_skips_jobs_already_in_dedup_store() -> None:
         store = MockStore.return_value
         store.is_new.return_value = False  # already seen
         store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
 
         await run(config)
 
@@ -166,6 +169,7 @@ async def test_marks_all_new_jobs_as_seen_not_just_matches() -> None:
         store = MockStore.return_value
         store.is_new.return_value = True
         store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
 
         await run(config)
 
@@ -190,6 +194,7 @@ async def test_marks_matching_jobs_with_score() -> None:
         store = MockStore.return_value
         store.is_new.return_value = True
         store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
 
         await run(config)
 
@@ -260,6 +265,7 @@ async def test_run_summary_counts_are_accurate() -> None:
         store = MockStore.return_value
         store.is_new.return_value = True
         store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
 
         summary = await run(config)
 
@@ -350,6 +356,7 @@ async def test_mark_seen_called_with_match_result_when_score_below_threshold() -
         store = MockStore.return_value
         store.is_new.return_value = True
         store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
 
         summary = await run(config)
 
@@ -377,8 +384,221 @@ async def test_above_threshold_match_added_to_site_matches() -> None:
         store = MockStore.return_value
         store.is_new.return_value = True
         store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
 
         summary = await run(config)
 
     assert len(summary.matches) == 1
     assert summary.matches[0].best_score == 0.85
+
+
+# ---------------------------------------------------------------------------
+# Pagination & multi-page orchestration
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_single_page_site_fetches_exactly_once() -> None:
+    # No pagination_param → range(1) → exactly 1 fetch
+    config = make_config(sites=[SiteTarget("Stripe", "https://stripe.com/jobs", "http")])
+
+    with (
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
+        patch("job_scout.orchestrator.create_client"),
+        patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")) as mock_fetch,
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
+        patch("job_scout.orchestrator.JobStore") as MockStore,
+        patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
+    ):
+        store = MockStore.return_value
+        store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
+
+        await run(config)
+
+    assert mock_fetch.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_paginated_site_fetches_up_to_max_pages() -> None:
+    target = SiteTarget(
+        name="Wells", url="https://wells.com/jobs", scrape_tier="http",
+        pagination_param="start", pagination_step=20, max_pages=3,
+    )
+    config = make_config(sites=[target])
+
+    with (
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
+        patch("job_scout.orchestrator.create_client"),
+        patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")) as mock_fetch,
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
+        patch("job_scout.orchestrator.JobStore") as MockStore,
+        patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
+        patch("job_scout.orchestrator._detect_stop", return_value=False),
+    ):
+        store = MockStore.return_value
+        store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
+
+        await run(config)
+
+    assert mock_fetch.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_paginated_site_stops_early_when_detect_stop_returns_true() -> None:
+    target = SiteTarget(
+        name="Wells", url="https://wells.com/jobs", scrape_tier="http",
+        pagination_param="start", pagination_step=20, max_pages=5,
+    )
+    config = make_config(sites=[target])
+
+    with (
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
+        patch("job_scout.orchestrator.create_client"),
+        patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")) as mock_fetch,
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
+        patch("job_scout.orchestrator.JobStore") as MockStore,
+        patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
+        patch("job_scout.orchestrator._detect_stop", return_value=True),
+    ):
+        store = MockStore.return_value
+        store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
+
+        await run(config)
+
+    # Stops after first page
+    assert mock_fetch.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_page_zero_scraping_failure_returns_error_site_result() -> None:
+    target = SiteTarget(
+        name="Wells", url="https://wells.com/jobs", scrape_tier="http",
+        pagination_param="start", pagination_step=20, max_pages=3,
+    )
+    config = make_config(sites=[target])
+
+    from job_scout.scraper.dispatcher import ScrapingFailedError
+
+    with (
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
+        patch("job_scout.orchestrator.create_client"),
+        patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, side_effect=ScrapingFailedError("fail")),
+        patch("job_scout.orchestrator.JobStore") as MockStore,
+        patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
+    ):
+        store = MockStore.return_value
+        store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
+
+        summary = await run(config)
+
+    assert summary.sites_failed == 1
+    assert summary.total_jobs_found == 0
+
+
+@pytest.mark.asyncio
+async def test_page_nonzero_scraping_failure_returns_partial_result() -> None:
+    target = SiteTarget(
+        name="Wells", url="https://wells.com/jobs", scrape_tier="http",
+        pagination_param="start", pagination_step=20, max_pages=3,
+    )
+    config = make_config(sites=[target])
+
+    from job_scout.scraper.dispatcher import ScrapingFailedError
+
+    call_count = 0
+
+    async def fetch_side_effect(*args, **kwargs) -> tuple[str, str]:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return ("text", "http")
+        raise ScrapingFailedError("page 1 failed")
+
+    with (
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
+        patch("job_scout.orchestrator.create_client"),
+        patch("job_scout.orchestrator.fetch_site_content", side_effect=fetch_side_effect),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([make_job()], 0.0)),
+        patch("job_scout.orchestrator.JobStore") as MockStore,
+        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=(None, 0.0)),
+        patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
+        patch("job_scout.orchestrator._detect_stop", return_value=False),
+    ):
+        store = MockStore.return_value
+        store.is_new.return_value = True
+        store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
+
+        summary = await run(config)
+
+    # Site should succeed (partial) with jobs from page 0
+    assert summary.sites_succeeded == 1
+    assert summary.total_jobs_found == 1
+
+
+@pytest.mark.asyncio
+async def test_update_site_health_called_once_with_total_across_all_pages() -> None:
+    target = SiteTarget(
+        name="Wells", url="https://wells.com/jobs", scrape_tier="http",
+        pagination_param="start", pagination_step=20, max_pages=3,
+    )
+    config = make_config(sites=[target])
+    page_jobs = [make_job(job_id=f"job-{i}") for i in range(5)]
+
+    with (
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
+        patch("job_scout.orchestrator.create_client"),
+        patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=(page_jobs, 0.0)),
+        patch("job_scout.orchestrator.JobStore") as MockStore,
+        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=(None, 0.0)),
+        patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
+        patch("job_scout.orchestrator._detect_stop", return_value=False),
+    ):
+        store = MockStore.return_value
+        store.is_new.return_value = False
+        store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
+
+        await run(config)
+
+    # 3 pages × 5 jobs = 15 total
+    store.update_site_health.assert_called_once_with("Wells", 15)
+
+
+@pytest.mark.asyncio
+async def test_paginated_urls_increment_by_step() -> None:
+    # Verify _build_page_url is called with correct offsets for each page
+    target = SiteTarget(
+        name="Wells", url="https://wells.com/jobs?pagesize=20", scrape_tier="http",
+        pagination_param="start", pagination_step=20, max_pages=3,
+    )
+    config = make_config(sites=[target])
+    fetched_urls: list[str] = []
+
+    async def capture_fetch(site_target: SiteTarget, *args, **kwargs) -> tuple[str, str]:
+        fetched_urls.append(site_target.url)
+        return ("text", "http")
+
+    with (
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
+        patch("job_scout.orchestrator.create_client"),
+        patch("job_scout.orchestrator.fetch_site_content", side_effect=capture_fetch),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([], 0.0)),
+        patch("job_scout.orchestrator.JobStore") as MockStore,
+        patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
+        patch("job_scout.orchestrator._detect_stop", return_value=False),
+    ):
+        store = MockStore.return_value
+        store.get_consecutive_zeros.return_value = 0
+        store.get_last_run_at.return_value = None
+
+        await run(config)
+
+    assert len(fetched_urls) == 3
+    assert "start=0" in fetched_urls[0]
+    assert "start=20" in fetched_urls[1]
+    assert "start=40" in fetched_urls[2]

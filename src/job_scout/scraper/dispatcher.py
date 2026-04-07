@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import random
 import re
@@ -21,6 +22,21 @@ class ScrapingFailedError(Exception):
 
 def _clean_html(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
+
+    # Extract datePosted from JSON-LD before script tags are removed.
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or "")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        date_posted = data.get("datePosted")
+        if date_posted:
+            script.replace_with(f"datePosted: {date_posted}")
+
+    # Normalize <time datetime="..."> — replace display text with the ISO value.
+    for time_tag in soup.find_all("time", datetime=True):
+        time_tag.string = time_tag["datetime"]
+
     for tag in soup.find_all(_REMOVE_TAGS):
         tag.decompose()
     text = soup.get_text(separator="\n", strip=True)

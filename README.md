@@ -58,7 +58,23 @@ sites:
   - name: Stripe
     url: https://stripe.com/jobs
     scrape_tier: http        # or 'playwright' for JS-heavy sites
+
+  # Optional: enable multi-page scraping
+  - name: Wells Fargo
+    url: https://www.wellsfargojobs.com/en/jobs/?search=&pagesize=20
+    scrape_tier: http
+    pagination:
+      param: start     # query param to increment (e.g. start=0, start=20, ...)
+      step: 20         # jobs per page
+      max_pages: 5     # hard ceiling on pages fetched per run
 ```
+
+Sites without a `pagination` block fetch a single page.
+
+Pagination uses three-layer freshness detection to stop early when all jobs on a page are already known:
+1. **datetime** — stops if all time-stamped jobs predate the last run
+2. **date-only** — stops if all dated jobs are more than one day old (preserves within-day ambiguity)
+3. **DB dedup** — stops if the entire page is already in the database (no temporal data available)
 
 ### Add resumes
 
@@ -91,7 +107,7 @@ uv run pytest --cov=src --cov-report=html
 
 ## GitHub Actions
 
-The workflow in `.github/workflows/scout.yml` runs every hour. Add the required secrets under **Settings → Secrets → Actions** in your repository.
+The workflow in `.github/workflows/scout.yml` runs every 2 hours between 8 AM and 10 PM CST (14:00–04:00 UTC). Add the required secrets under **Settings → Secrets → Actions** in your repository.
 
 ## Supabase setup
 

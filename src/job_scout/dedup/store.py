@@ -55,6 +55,19 @@ class JobStore:
         if not result.data:
             logger.error("update_site_health: upsert returned no data for site=%s", site_name)
 
+    def get_last_run_at(self, site_name: str) -> datetime | None:
+        result = (
+            self._client.table(SITE_HEALTH_TABLE)
+            .select("last_success_at")
+            .eq("site_name", site_name)
+            .execute()
+        )
+        if not result.data or result.data[0]["last_success_at"] is None:
+            return None
+        raw = result.data[0]["last_success_at"]
+        dt = datetime.fromisoformat(raw)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
     def get_consecutive_zeros(self, site_name: str) -> int:
         result = (
             self._client.table(SITE_HEALTH_TABLE)
