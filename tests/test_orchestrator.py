@@ -322,3 +322,63 @@ async def test_sends_failure_alert_on_unhandled_exception() -> None:
     # The run itself should complete (not propagate)
     assert summary.sites_failed > 0
     mock_alert.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_mark_seen_called_with_match_result_when_score_below_threshold() -> None:
+    config = make_config(sites=[SiteTarget("Stripe", "https://stripe.com/jobs", "http")])
+    job = make_job()
+    low_score_match = MatchResult(
+        job=job,
+        best_resume=ResumeProfile(role_label="AI Engineer", filename="ai_engineer.md", content="c"),
+        best_score=0.40,
+        match_reason="Weak fit.",
+        missing_keywords=[],
+        runner_up_resume=None,
+        runner_up_score=None,
+    )
+
+    with (
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
+        patch("job_scout.orchestrator.create_client"),
+        patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([job], 0.0)),
+        patch("job_scout.orchestrator.JobStore") as MockStore,
+        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=(low_score_match, 0.0)),
+        patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
+    ):
+        store = MockStore.return_value
+        store.is_new.return_value = True
+        store.get_consecutive_zeros.return_value = 0
+
+        summary = await run(config)
+
+    # mark_seen must receive the actual MatchResult even when score is below threshold
+    store.mark_seen.assert_called_once_with(job, match_result=low_score_match)
+    # But the low-score match must NOT appear in notifications
+    assert len(summary.matches) == 0
+
+
+@pytest.mark.asyncio
+async def test_above_threshold_match_added_to_site_matches() -> None:
+    config = make_config(sites=[SiteTarget("Stripe", "https://stripe.com/jobs", "http")])
+    job = make_job()
+    high_score_match = make_match(job)  # best_score=0.85, threshold=0.70
+
+    with (
+        patch("job_scout.orchestrator.anthropic.AsyncAnthropic"),
+        patch("job_scout.orchestrator.create_client"),
+        patch("job_scout.orchestrator.fetch_site_content", new_callable=AsyncMock, return_value=("text", "http")),
+        patch("job_scout.orchestrator.extract_jobs", new_callable=AsyncMock, return_value=([job], 0.0)),
+        patch("job_scout.orchestrator.JobStore") as MockStore,
+        patch("job_scout.orchestrator.match_job", new_callable=AsyncMock, return_value=(high_score_match, 0.0)),
+        patch("job_scout.orchestrator.send_digest", new_callable=AsyncMock),
+    ):
+        store = MockStore.return_value
+        store.is_new.return_value = True
+        store.get_consecutive_zeros.return_value = 0
+
+        summary = await run(config)
+
+    assert len(summary.matches) == 1
+    assert summary.matches[0].best_score == 0.85
