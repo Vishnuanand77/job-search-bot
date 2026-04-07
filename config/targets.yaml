@@ -10,11 +10,6 @@ sites:
     url: https://www.wellsfargojobs.com/en/jobs/?search=&country=United+States+of+America&team=Data+%26+Analytics&team=Technology&pagesize=20#results
     scrape_tier: http
 
-  # probe: HTTP 200 (1.2s) | Playwright ✓ (3.3s)
-  - name: KPMG
-    url: https://www.kpmguscareers.com/job-search/?career-level-parents=&career-level=Early%20Career%7CAdministrative%2FTechnical%20Support%7CAssociate%7CSenior%20Associate%7CAssociate%20Director%7C&spage=1
-    scrape_tier: http
-
   # probe: HTTP 200 (0.7s) | Playwright ✓ (4.2s)
   # Note: eightfold.ai is a JS SPA — HTTP returns shell; revisit in Phase 4
   # - name: American Express
