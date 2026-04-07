@@ -44,7 +44,6 @@ async def match_job(
     job: JobPosting,
     resumes: list[ResumeProfile],
     client: anthropic.AsyncAnthropic,
-    threshold: float,
 ) -> tuple[MatchResult | None, float]:
     resume_index = {r.filename: r for r in resumes}
 
@@ -86,8 +85,6 @@ async def match_job(
         return None, cost
 
     best_score: float = float(data.get("best_score", 0.0))
-    if best_score < threshold:
-        return None, cost
 
     runner_up_filename: str | None = data.get("runner_up_filename")
     runner_up_resume = resume_index.get(runner_up_filename) if runner_up_filename else None

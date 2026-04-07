@@ -57,10 +57,10 @@ async def _process_site(
                 if not store.is_new(job):
                     continue
                 new_jobs += 1
-                result, match_cost = await match_job(job, config.resumes, anthropic_client, config.match_threshold)
+                result, match_cost = await match_job(job, config.resumes, anthropic_client)
                 site_cost += match_cost
                 store.mark_seen(job, match_result=result)
-                if result is not None:
+                if result is not None and result.best_score >= config.match_threshold:
                     site_matches.append(result)
 
             logger.info(
