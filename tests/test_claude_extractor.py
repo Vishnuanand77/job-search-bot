@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import time
 from hashlib import sha256
 from unittest.mock import AsyncMock, MagicMock
 
@@ -232,3 +233,52 @@ async def test_handles_null_posted_date():
     jobs, cost = await extract_jobs("content", "Acme", "https://example.com", client)
 
     assert jobs[0].posted_date is None
+
+
+# ---------------------------------------------------------------------------
+# posted_time extraction
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_extracts_posted_time_when_present() -> None:
+    job = {**_valid_job_json(), "posted_time": "14:30"}
+    client = _make_client(json.dumps({"jobs": [job]}))
+    jobs, _ = await extract_jobs("content", "Acme", "https://example.com", client)
+    assert jobs[0].posted_time == time(14, 30)
+
+
+@pytest.mark.asyncio
+async def test_posted_time_accepts_hhmmss_format() -> None:
+    job = {**_valid_job_json(), "posted_time": "09:15:00"}
+    client = _make_client(json.dumps({"jobs": [job]}))
+    jobs, _ = await extract_jobs("content", "Acme", "https://example.com", client)
+    assert jobs[0].posted_time == time(9, 15, 0)
+
+
+@pytest.mark.asyncio
+async def test_posted_time_is_none_when_field_absent() -> None:
+    client = _make_client(json.dumps({"jobs": [_valid_job_json()]}))
+    jobs, _ = await extract_jobs("content", "Acme", "https://example.com", client)
+    assert jobs[0].posted_time is None
+
+
+@pytest.mark.asyncio
+async def test_posted_time_is_none_when_field_is_null() -> None:
+    job = {**_valid_job_json(), "posted_time": None}
+    client = _make_client(json.dumps({"jobs": [job]}))
+    jobs, _ = await extract_jobs("content", "Acme", "https://example.com", client)
+    assert jobs[0].posted_time is None
+
+
+@pytest.mark.asyncio
+async def test_posted_time_is_none_when_field_is_invalid() -> None:
+    job = {**_valid_job_json(), "posted_time": "not-a-time"}
+    client = _make_client(json.dumps({"jobs": [job]}))
+    jobs, _ = await extract_jobs("content", "Acme", "https://example.com", client)
+    assert jobs[0].posted_time is None
+
+
+@pytest.mark.asyncio
+async def test_system_prompt_contains_posted_time_field() -> None:
+    from job_scout.extractor.claude_extractor import SYSTEM_PROMPT
+    assert "posted_time" in SYSTEM_PROMPT
