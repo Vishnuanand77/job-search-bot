@@ -69,7 +69,12 @@ sites:
       max_pages: 5     # hard ceiling on pages fetched per run
 ```
 
-Sites without a `pagination` block fetch a single page, same as before.
+Sites without a `pagination` block fetch a single page.
+
+Pagination uses three-layer freshness detection to stop early when all jobs on a page are already known:
+1. **datetime** — stops if all time-stamped jobs predate the last run
+2. **date-only** — stops if all dated jobs are more than one day old (preserves within-day ambiguity)
+3. **DB dedup** — stops if the entire page is already in the database (no temporal data available)
 
 ### Add resumes
 
