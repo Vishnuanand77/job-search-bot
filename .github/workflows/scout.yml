@@ -1,7 +1,7 @@
 name: Job Scout
 on:
-  schedule:
-    - cron: '0 0,2,4,14,16,18,20,22 * * *'
+  # schedule:
+  #   - cron: '0 0,2,4,14,16,18,20,22 * * *'
   workflow_dispatch:
 
 jobs:
