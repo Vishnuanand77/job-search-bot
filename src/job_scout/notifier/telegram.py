@@ -53,6 +53,8 @@ def format_digest(
         f"{summary.new_jobs} new · "
         f"{len(summary.matches)} matches",
         f"💰 Cost: {cost_str}",
+        "\n<b>Scoring guide:</b>",
+        "0.9+ — Exceptional fit | 0.8–0.9 — Strong match | 0.7–0.8 — Learning opportunity",
     ]
     for err in summary.errors:
         footer_lines.append(f"⚠️ Failed: {err}")
@@ -72,7 +74,12 @@ def format_digest(
                 f"│  {m.match_reason}"
             )
             if m.missing_keywords:
-                lines.append(f"│  ⚠️ Missing: {', '.join(m.missing_keywords)}")
+                if 0.7 <= m.best_score < 0.9:
+                    lines.append(
+                        f"│  🎓 <b>Learning opportunity:</b> {', '.join(m.missing_keywords)}"
+                    )
+                else:
+                    lines.append(f"│  ⚠️ Missing: {', '.join(m.missing_keywords)}")
             if m.runner_up_resume and m.runner_up_score is not None:
                 runner_pct = f"{round(m.runner_up_score * 100)}%"
                 lines.append(

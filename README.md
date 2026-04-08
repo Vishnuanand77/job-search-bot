@@ -7,8 +7,9 @@ A Python cron job that scrapes company career pages, scores new job postings aga
 1. Scrapes configured career pages (HTTP with Playwright fallback for JS-heavy sites)
 2. Extracts job listings using Claude Haiku
 3. Deduplicates against a Supabase store
-4. Scores each new job against all resumes using Claude Sonnet
-5. Sends a Telegram digest grouped by company with scores and missing keywords
+4. **Classifies** each new job into Software Engineering, Data Science, AI Engineering, or Not Relevant (Haiku)
+5. **Matches** relevant jobs against all resumes with role-specific scoring rubrics (Sonnet)
+6. Sends a Telegram digest grouped by company with scores and missing keywords
 
 ## Setup
 

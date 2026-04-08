@@ -109,6 +109,54 @@ def test_missing_keywords_appear_in_digest() -> None:
     assert "Triton" in text
 
 
+def test_learning_opportunity_label_for_borderline_matches() -> None:
+    """Matches in 0.7-0.9 range should show 'Learning opportunity' label."""
+    matches = [make_match(score=0.78, missing=["Kubernetes", "Ray"])]
+    summary = make_summary(matches=matches)
+    parts = format_digest(summary)
+    text = "\n".join(parts)
+    assert "🎓" in text  # Learning opportunity emoji
+    assert "Learning opportunity" in text
+    assert "Kubernetes" in text
+    assert "Ray" in text
+
+
+def test_missing_label_for_low_score_matches() -> None:
+    """Matches below 0.7 should show 'Missing' label, not learning opportunity."""
+    matches = [make_match(score=0.62, missing=["MLOps"])]
+    summary = make_summary(matches=matches)
+    parts = format_digest(summary)
+    text = "\n".join(parts)
+    # Split at the footer to check only the match section
+    match_section = text.split("──────────────")[0]
+    assert "⚠️ Missing" in match_section
+    assert "🎓 <b>Learning opportunity" not in match_section
+
+
+def test_missing_label_for_high_score_matches() -> None:
+    """Matches 0.9+ should show 'Missing' label, not learning opportunity."""
+    matches = [make_match(score=0.92, missing=["Triton"])]
+    summary = make_summary(matches=matches)
+    parts = format_digest(summary)
+    text = "\n".join(parts)
+    # Split at the footer to check only the match section
+    match_section = text.split("──────────────")[0]
+    assert "⚠️ Missing" in match_section
+    assert "🎓 <b>Learning opportunity" not in match_section
+
+
+def test_scoring_guide_appears_in_digest_footer() -> None:
+    """Scoring guide should appear in the digest footer."""
+    matches = [make_match()]
+    summary = make_summary(matches=matches)
+    parts = format_digest(summary)
+    text = "\n".join(parts)
+    assert "Scoring guide" in text
+    assert "Exceptional fit" in text
+    assert "Strong match" in text
+    assert "Learning opportunity" in text
+
+
 def test_runner_up_score_appears_in_digest() -> None:
     matches = [make_match(runner_up_score=0.74)]
     summary = make_summary(matches=matches)
