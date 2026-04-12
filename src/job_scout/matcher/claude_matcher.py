@@ -3,14 +3,21 @@ import logging
 from enum import Enum
 
 import anthropic
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from job_scout.models import JobPosting, MatchResult, ResumeProfile
 
 logger = logging.getLogger(__name__)
 
+_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
+
 HAIKU_MODEL = "claude-haiku-4-5"
 SONNET_MODEL = "claude-sonnet-4-6"
-HAIKU_MAX_TOKENS = 256
+HAIKU_MAX_TOKENS = 1024
 SONNET_MAX_TOKENS = 2048
 
 # Pricing per token (USD) — verify at https://anthropic.com/pricing
@@ -62,11 +69,15 @@ Return ONLY valid JSON — no preamble:
 {
   "best_resume_filename": "string",
   "best_score": 0.85,
-  "match_reason": "string — one concise sentence",
+  "match_reason": "string — one concise sentence only",
   "missing_keywords": ["keyword1", "keyword2"],
   "runner_up_filename": "string or null",
   "runner_up_score": 0.72
 }
+
+CONSTRAINTS:
+- missing_keywords: list up to 5 items maximum
+- match_reason: exactly one sentence, under 120 characters
 
 SCORING RUBRIC:
 """
@@ -117,6 +128,7 @@ requirements. Entry-level only. Would need 2-3 weeks to ramp on GenAI specifics.
     return base + role_guidance.get(role, "")
 
 
+@_retry
 async def classify_job_role(
     job: JobPosting,
     client: anthropic.AsyncAnthropic,
@@ -153,11 +165,19 @@ async def classify_job_role(
             data.get("confidence", 0.0),
         )
         return role, cost
-    except (json.JSONDecodeError, KeyError, ValueError) as exc:
-        logger.warning("classify_job_role: failed to parse or validate role classification: %s", exc)
+    except json.JSONDecodeError as exc:
+        # Parse failure: API returned malformed JSON (truncation, etc).
+        # Re-raise so @_retry decorator can retry this call.
+        logger.warning("classify_job_role: JSON parse error (will retry): %s", exc)
+        raise
+    except (KeyError, ValueError, IndexError) as exc:
+        # Validation failure: JSON was valid but contained unexpected values.
+        # This is a real classification decision (not relevant), not a transient error.
+        logger.warning("classify_job_role: validation error (returning NOT_RELEVANT): %s", exc)
         return JobRole.NOT_RELEVANT, cost
 
 
+@_retry
 async def match_job(
     job: JobPosting,
     resumes: list[ResumeProfile],
@@ -209,7 +229,7 @@ async def match_job(
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         data = json.loads(raw)
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, IndexError) as exc:
         logger.warning("match_job: failed to parse Claude response: %s", exc)
         return None, total_cost
 

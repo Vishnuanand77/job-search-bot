@@ -182,6 +182,26 @@ def test_splits_long_digest_at_company_boundary() -> None:
         assert len(part) <= 4000
 
 
+def test_handles_single_company_with_many_matches_exceeding_limit() -> None:
+    """Test that a single company with many matches doesn't exceed 4000 char limit."""
+    # Create many matches for a single company to exceed 4000 chars
+    matches = [
+        make_match(
+            company="MegaCorp",
+            title=f"Role {i}: Engineer with " + "description " * 5,
+            missing=["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+        )
+        for i in range(15)
+    ]
+    summary = make_summary(matches=matches)
+    parts = format_digest(summary)
+    # Should split into multiple messages
+    assert len(parts) >= 1
+    # Each message must respect the limit
+    for part in parts:
+        assert len(part) <= 4000, f"Message exceeded 4000 chars: {len(part)}"
+
+
 def test_stale_site_warning_appears_when_consecutive_zeros_gte_3() -> None:
     summary = make_summary()
     stale_sites = {"DeadCorp": 3, "GhostCo": 5}
@@ -285,16 +305,39 @@ async def test_dry_run_logs_formatted_message(caplog: pytest.LogCaptureFixture) 
 
 
 @pytest.mark.asyncio
-async def test_logs_error_when_telegram_returns_http_error(caplog: pytest.LogCaptureFixture) -> None:
+async def test_retries_on_429_rate_limit(caplog: pytest.LogCaptureFixture) -> None:
+    """429 errors trigger retries; eventual success is logged."""
+    import logging
+    summary = make_summary(matches=[make_match()])
+    with respx.mock:
+        route = respx.post("https://api.telegram.org/botTEST_TOKEN/sendMessage")
+        # First 2 attempts return 429, 3rd succeeds
+        route.mock(
+            side_effect=[
+                httpx.Response(429),
+                httpx.Response(429),
+                httpx.Response(200, json={"ok": True}),
+            ]
+        )
+        with caplog.at_level(logging.WARNING, logger="job_scout.notifier.telegram"):
+            await send_digest(summary, bot_token="TEST_TOKEN", chat_id="123")
+    # Should have logged the rate limit warning at least once
+    assert any("rate limited" in r.message.lower() or "429" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_logs_error_on_fatal_http_status(caplog: pytest.LogCaptureFixture) -> None:
+    """Non-429 HTTP errors (like 500, 403) are logged but don't retry."""
     import logging
     summary = make_summary(matches=[make_match()])
     with respx.mock:
         respx.post("https://api.telegram.org/botTEST_TOKEN/sendMessage").mock(
-            return_value=httpx.Response(429)
+            return_value=httpx.Response(500)
         )
         with caplog.at_level(logging.ERROR, logger="job_scout.notifier.telegram"):
             await send_digest(summary, bot_token="TEST_TOKEN", chat_id="123")
-    assert any("429" in r.message or "http error" in r.message.lower() for r in caplog.records)
+    # Should log the HTTP error
+    assert any("500" in r.message or "http error" in r.message.lower() for r in caplog.records)
 
 
 @pytest.mark.asyncio

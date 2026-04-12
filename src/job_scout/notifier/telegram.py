@@ -3,10 +3,17 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from job_scout.models import MatchResult, RunSummary
 
 logger = logging.getLogger(__name__)
+
+_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 MAX_MESSAGE_LEN = 4000
@@ -62,44 +69,78 @@ def format_digest(
         footer_lines.append(_stale_warnings(stale_sites))
     footer = "\n".join(footer_lines)
 
-    # Build per-company blocks
-    company_blocks: list[str] = []
-    for company, matches in by_company.items():
-        lines = [f"\n<b>{company}</b>"]
-        for m in matches:
-            score_pct = f"{round(m.best_score * 100)}%"
-            lines.append(
-                f"├ 🎯 <b>{m.job.title}</b>\n"
-                f"│  Resume: <i>{m.best_resume.role_label}</i> · Match: <b>{score_pct}</b>\n"
-                f"│  {m.match_reason}"
-            )
-            if m.missing_keywords:
-                if 0.7 <= m.best_score < 0.9:
-                    lines.append(
-                        f"│  🎓 <b>Learning opportunity:</b> {', '.join(m.missing_keywords)}"
-                    )
-                else:
-                    lines.append(f"│  ⚠️ Missing: {', '.join(m.missing_keywords)}")
-            if m.runner_up_resume and m.runner_up_score is not None:
-                runner_pct = f"{round(m.runner_up_score * 100)}%"
-                lines.append(
-                    f"│  Runner-up: {m.runner_up_resume.role_label} · {runner_pct}"
-                )
-            lines.append(f"│  <a href=\"{m.job.url}\">View Job →</a>")
-        company_blocks.append("\n".join(lines))
-
-    # Split into messages at company boundaries if needed
+    # Build messages by accumulating matches, respecting size limits
     messages: list[str] = []
     current = header
-    for block in company_blocks:
-        candidate = current + block
-        if len(candidate) > MAX_MESSAGE_LEN and current != header:
-            messages.append(current)
-            current = header + block
-        else:
-            current = candidate
+    footer_len = len(footer)
+    current_company = None
+    current_company_lines = []
 
-    current += footer
+    def format_match(m: MatchResult) -> str:
+        """Format a single match as multiple lines."""
+        score_pct = f"{round(m.best_score * 100)}%"
+        lines = [
+            f"├ 🎯 <b>{m.job.title}</b>\n"
+            f"│  Resume: <i>{m.best_resume.role_label}</i> · Match: <b>{score_pct}</b>\n"
+            f"│  {m.match_reason}"
+        ]
+        if m.missing_keywords:
+            if 0.7 <= m.best_score < 0.9:
+                lines.append(
+                    f"│  🎓 <b>Learning opportunity:</b> {', '.join(m.missing_keywords)}"
+                )
+            else:
+                lines.append(f"│  ⚠️ Missing: {', '.join(m.missing_keywords)}")
+        if m.runner_up_resume and m.runner_up_score is not None:
+            runner_pct = f"{round(m.runner_up_score * 100)}%"
+            lines.append(
+                f"│  Runner-up: {m.runner_up_resume.role_label} · {runner_pct}"
+            )
+        lines.append(f"│  <a href=\"{m.job.url}\">View Job →</a>")
+        return "\n".join(lines)
+
+    # Iterate through companies and matches
+    for company, matches in by_company.items():
+        company_header = f"\n<b>{company}</b>"
+
+        for m in matches:
+            match_text = format_match(m)
+
+            # Check if adding this match would exceed limit (accounting for footer)
+            test_current = current + company_header + match_text if company != current_company else current + match_text
+            if len(test_current) + footer_len > MAX_MESSAGE_LEN and len(current) > len(header):
+                # Current message is full; finalize and start new one
+                if len(current) + footer_len <= MAX_MESSAGE_LEN:
+                    current += footer
+                messages.append(current)
+                current = header
+                current_company = None
+                current_company_lines = []
+
+                # Now try adding the company header and match to fresh message
+                test_current = current + company_header + match_text
+                if len(test_current) + footer_len > MAX_MESSAGE_LEN:
+                    # Even fresh message can't hold this; add header and match as-is
+                    # (company info + single match should fit in most cases)
+                    current += company_header + match_text
+                    current_company = company
+                else:
+                    current += company_header + match_text
+                    current_company = company
+            else:
+                # Add to current message
+                if company != current_company:
+                    current += company_header
+                    current_company = company
+                current += match_text
+
+    # Finalize last message with footer
+    if len(current) + footer_len > MAX_MESSAGE_LEN:
+        messages.append(current)
+        current = header + footer
+    else:
+        current += footer
+
     messages.append(current)
     return messages
 
@@ -156,6 +197,7 @@ async def send_failure_alert(
         await _post(client, bot_token, chat_id, text)
 
 
+@_retry
 async def _post(
     client: httpx.AsyncClient,
     bot_token: str,
@@ -171,6 +213,17 @@ async def _post(
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
+        # For 429 (Too Many Requests), re-raise so @_retry handles it
+        if exc.response.status_code == 429:
+            retry_after = exc.response.headers.get("Retry-After", "60")
+            try:
+                wait_seconds = int(retry_after)
+            except ValueError:
+                # Retry-After can be an HTTP-date; default to 60s
+                wait_seconds = 60
+            logger.warning("Telegram rate limited (429); waiting %d seconds before retry", wait_seconds)
+            raise
+
         logger.error("Telegram HTTP error %s posting message: %s", exc.response.status_code, exc)
         return
     data = response.json()

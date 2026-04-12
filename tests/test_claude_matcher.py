@@ -106,15 +106,20 @@ async def test_classify_job_role_identifies_not_relevant() -> None:
 
 
 @pytest.mark.asyncio
-async def test_classify_job_role_returns_not_relevant_on_json_error() -> None:
+async def test_classify_job_role_retries_on_json_parse_error() -> None:
+    """JSON parse errors trigger retry (3 attempts), then raise."""
     message = MagicMock()
     message.content = [MagicMock(text="not valid json {{{")]
     message.usage.input_tokens = 100
     message.usage.output_tokens = 50
     client = MagicMock()
     client.messages.create = AsyncMock(return_value=message)
-    role, cost = await classify_job_role(make_job(), client)
-    assert role == JobRole.NOT_RELEVANT
+
+    with pytest.raises(json.JSONDecodeError):
+        await classify_job_role(make_job(), client)
+
+    # Verify it retried 3 times (the default in _retry decorator)
+    assert client.messages.create.call_count == 3
 
 
 @pytest.mark.asyncio
@@ -510,3 +515,49 @@ async def test_total_cost_includes_classification_and_matching() -> None:
     # SONNET: 500 * 3.00 / 1M + 100 * 15.00 / 1M = 0.003
     # Total: ~0.0038
     assert cost >= 0.001  # At least 0.001 (generous lower bound)
+
+
+# ---------------------------------------------------------------------------
+# test_classify_job_role_returns_default_on_empty_content_list
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_classify_job_role_returns_default_on_empty_content_list() -> None:
+    """Test graceful handling when Anthropic SDK returns empty content list."""
+    client = MagicMock()
+    message = MagicMock()
+    message.content = []  # Empty content list triggers IndexError
+    message.usage.input_tokens = 100
+    message.usage.output_tokens = 50
+    client.messages.create = AsyncMock(return_value=message)
+
+    role, cost = await classify_job_role(make_job(), client)
+
+    assert role == JobRole.NOT_RELEVANT
+
+
+# ---------------------------------------------------------------------------
+# test_match_job_returns_none_on_empty_content_list_in_match_stage
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_match_job_returns_none_on_empty_content_list_in_match_stage() -> None:
+    """Test graceful handling when match stage gets empty content list."""
+    classification_payload = {
+        "role": "ai_engineer",
+        "confidence": 0.95,
+        "reasoning": "LLM systems.",
+    }
+    message = MagicMock()
+    message.content = []  # Empty content list triggers IndexError
+    message.usage.input_tokens = 100
+    message.usage.output_tokens = 50
+    client = MagicMock()
+    client.messages.create = AsyncMock(
+        side_effect=[
+            make_claude_response(classification_payload),
+            message,
+        ]
+    )
+    result, cost = await match_job(make_job(), make_resumes(), client)
+    assert result is None

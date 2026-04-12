@@ -4,10 +4,17 @@ from datetime import date, time
 from urllib.parse import urljoin, urlparse
 
 import anthropic
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from job_scout.models import JobPosting
 
 logger = logging.getLogger(__name__)
+
+_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
 
 MODEL = "claude-haiku-4-5"
 MAX_TOKENS = 4096
@@ -47,6 +54,7 @@ Rules:
 """
 
 
+@_retry
 async def extract_jobs(
     content: str,
     company_name: str,
@@ -84,7 +92,7 @@ async def extract_jobs(
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
         data = json.loads(raw)
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, IndexError) as exc:
         logger.warning("JSON parse failure extracting jobs for %s: %s", company_name, exc)
         return [], 0.0
 

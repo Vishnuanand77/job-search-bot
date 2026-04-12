@@ -164,6 +164,20 @@ def test_update_site_health_does_not_overwrite_last_success_at_on_failure() -> N
     assert "last_success_at" not in data
 
 
+def test_update_site_health_returns_incremented_zeros() -> None:
+    client = _make_client_for_site_health(consecutive_zeros=2)
+    store = JobStore(client)
+    result = store.update_site_health("Example Corp", job_count=0)
+    assert result == 3
+
+
+def test_update_site_health_returns_reset_zeros() -> None:
+    client = _make_client_for_site_health(consecutive_zeros=5)
+    store = JobStore(client)
+    result = store.update_site_health("Example Corp", job_count=10)
+    assert result == 0
+
+
 # --- get_consecutive_zeros ---
 
 def test_get_consecutive_zeros_returns_0_for_unknown_site() -> None:
@@ -243,3 +257,25 @@ def test_get_last_run_at_queries_correct_site_name() -> None:
     client.table.return_value.select.return_value.eq.assert_called_once_with(
         "site_name", "Capital One"
     )
+
+
+# --- Retry behavior ---
+
+def test_is_new_retries_on_transient_failure(mocker) -> None:
+    """Test that is_new retries on transient errors (but ultimately fails after 3 attempts)."""
+    client = MagicMock()
+    # Mock execute() to fail with a transient error (e.g., network timeout)
+    client.table.return_value.select.return_value.eq.return_value.execute.side_effect = (
+        Exception("Network timeout")
+    )
+    store = JobStore(client)
+
+    # Patch sleep to avoid actual waits
+    mocker.patch("tenacity.nap.time.sleep")
+
+    # Verify that it retries 3 times then raises
+    with pytest.raises(Exception, match="Network timeout"):
+        store.is_new(make_job())
+
+    # execute() should be called 3 times (3 retries)
+    assert client.table.return_value.select.return_value.eq.return_value.execute.call_count == 3

@@ -80,6 +80,20 @@ def test_layer1_continues_when_timed_job_equals_last_run() -> None:
     assert _detect_stop(jobs, _LAST_RUN, 0) is False
 
 
+def test_mixed_timed_and_dated_only_jobs_checks_all_temporal_signals() -> None:
+    # Bug regression: when page has both timed and dated-only jobs,
+    # Layer 1 must check ALL jobs with temporal data, not just timed ones.
+    # If all timed jobs are old but dated-only jobs are recent, should continue.
+    jobs = [
+        # Old timed job
+        _make_job(posted_date=date(2024, 1, 10), posted_time=time(10, 0, 0)),
+        # Recent dated-only job (yesterday, still within tolerance)
+        _make_job(posted_date=date(2024, 1, 14), posted_time=None),
+    ]
+    # Should continue because the dated-only job is recent (Jan 14 >= Jan 14)
+    assert _detect_stop(jobs, _LAST_RUN, 0) is False
+
+
 # ---------------------------------------------------------------------------
 # Layer 2: posted_date only (no time)
 # ---------------------------------------------------------------------------

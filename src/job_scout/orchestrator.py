@@ -1,12 +1,13 @@
 import asyncio
 import logging
 import os
+import random
 import sys
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import anthropic
-import httpx
+from playwright.async_api import async_playwright
 from supabase import create_client
 
 from job_scout.config import AppConfig, load_config
@@ -16,6 +17,7 @@ from job_scout.matcher.claude_matcher import match_job
 from job_scout.models import JobPosting, MatchResult, RunSummary, SiteResult, SiteTarget
 from job_scout.notifier.telegram import send_digest, send_failure_alert
 from job_scout.scraper.dispatcher import ScrapingFailedError, fetch_site_content
+from job_scout.scraper.http_scraper import BROWSER_HEADERS
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +45,25 @@ def _detect_stop(
     has_date = any(j.posted_date is not None for j in jobs)
 
     if has_time and has_date:
+        # Mixed case: some jobs have date+time, some may have only date.
+        # Check both types with appropriate thresholds.
         timed_jobs = [j for j in jobs if j.posted_date and j.posted_time]
-        if timed_jobs:
-            return all(
-                datetime.combine(j.posted_date, j.posted_time, tzinfo=timezone.utc) < last_run_at
-                for j in timed_jobs
-            )
+        dated_only_jobs = [j for j in jobs if j.posted_date and not j.posted_time]
+
+        # All timed jobs must be older than last_run_at
+        all_timed_old = all(
+            datetime.combine(j.posted_date, j.posted_time, tzinfo=timezone.utc) < last_run_at
+            for j in timed_jobs
+        ) if timed_jobs else True
+
+        # All dated-only jobs must be older than 1 day before last_run_at
+        cutoff_date = (last_run_at - timedelta(days=1)).date()
+        all_dated_old = all(
+            j.posted_date < cutoff_date
+            for j in dated_only_jobs
+        ) if dated_only_jobs else True
+
+        return all_timed_old and all_dated_old
 
     if has_date:
         cutoff_date = (last_run_at - timedelta(days=1)).date()
@@ -63,7 +78,6 @@ async def _process_site(
     config: AppConfig,
     anthropic_client: anthropic.AsyncAnthropic,
     store: JobStore,
-    http_client: httpx.AsyncClient,
     semaphore: asyncio.Semaphore,
 ) -> SiteResult:
     async with semaphore:
@@ -77,69 +91,85 @@ async def _process_site(
         pages = range(target.max_pages) if target.pagination_param else range(1)
 
         try:
-            for page_num in pages:
-                if target.pagination_param:
-                    page_url = _build_page_url(
-                        target.url,
-                        target.pagination_param,
-                        page_num * target.pagination_step,
+            # Create browser once per site, reuse context across pages
+            async with async_playwright() as pw:
+                async with await pw.chromium.launch(headless=True) as browser:
+                    context = await browser.new_context(
+                        user_agent=BROWSER_HEADERS["User-Agent"]
                     )
-                else:
-                    page_url = target.url
 
-                page_target = SiteTarget(
-                    name=target.name,
-                    url=page_url,
-                    scrape_tier=target.scrape_tier,
-                )
+                    try:
+                        for page_num in pages:
+                            if target.pagination_param:
+                                page_url = _build_page_url(
+                                    target.url,
+                                    target.pagination_param,
+                                    page_num * target.pagination_step,
+                                )
+                            else:
+                                page_url = target.url
 
-                try:
-                    text, tier_used = await fetch_site_content(page_target, http_client)
-                except ScrapingFailedError as exc:
-                    logger.warning("[%s] page=%d scraping failed: %s", target.name, page_num, exc)
-                    if page_num == 0:
-                        store.update_site_health(target.name, 0)
-                        return SiteResult(
-                            site_name=target.name,
-                            url=target.url,
-                            jobs_found=0,
-                            new_jobs=0,
-                            matches=[],
-                            error=str(exc),
-                            scraper_tier_used="none",
-                        )
-                    break
+                            page_target = SiteTarget(
+                                name=target.name,
+                                url=page_url,
+                                scrape_tier=target.scrape_tier,
+                            )
 
-                jobs, extract_cost = await extract_jobs(text, target.name, page_url, anthropic_client)
-                site_cost += extract_cost
-                all_jobs_found += len(jobs)
+                            try:
+                                text, tier_used = await fetch_site_content(page_target, context)
+                            except ScrapingFailedError as exc:
+                                logger.warning("[%s] page=%d scraping failed: %s", target.name, page_num, exc)
+                                if page_num == 0:
+                                    new_zeros = store.update_site_health(target.name, 0)
+                                    return SiteResult(
+                                        site_name=target.name,
+                                        url=target.url,
+                                        jobs_found=0,
+                                        new_jobs=0,
+                                        matches=[],
+                                        error=str(exc),
+                                        scraper_tier_used="none",
+                                        consecutive_zeros=new_zeros,
+                                    )
+                                break
 
-                page_new: int = 0
-                for job in jobs:
-                    if not store.is_new(job):
-                        continue
-                    page_new += 1
-                    new_jobs += 1
-                    result, match_cost = await match_job(job, config.resumes, anthropic_client)
-                    site_cost += match_cost
-                    store.mark_seen(job, match_result=result)
-                    if result is not None and result.best_score >= config.match_threshold:
-                        site_matches.append(result)
+                            jobs, extract_cost = await extract_jobs(text, target.name, page_url, anthropic_client)
+                            site_cost += extract_cost
+                            all_jobs_found += len(jobs)
 
-                logger.info(
-                    "[%s] page=%d tier=%s jobs=%d new=%d matches=%d",
-                    target.name,
-                    page_num,
-                    tier_used,
-                    len(jobs),
-                    page_new,
-                    len(site_matches),
-                )
+                            page_new: int = 0
+                            for job in jobs:
+                                if not store.is_new(job):
+                                    continue
+                                page_new += 1
+                                new_jobs += 1
+                                result, match_cost = await match_job(job, config.resumes, anthropic_client)
+                                site_cost += match_cost
+                                store.mark_seen(job, match_result=result)
+                                if result is not None and result.best_score >= config.match_threshold:
+                                    site_matches.append(result)
 
-                if _detect_stop(jobs, last_run_at, page_new):
-                    break
+                            logger.info(
+                                "[%s] page=%d tier=%s jobs=%d new=%d matches=%d",
+                                target.name,
+                                page_num,
+                                tier_used,
+                                len(jobs),
+                                page_new,
+                                len(site_matches),
+                            )
 
-            store.update_site_health(target.name, all_jobs_found)
+                            if _detect_stop(jobs, last_run_at, page_new):
+                                break
+
+                            # Jitter between paginated requests to same domain (1-3s)
+                            # Skip on last page to avoid unnecessary delay after final page
+                            if page_num < target.max_pages - 1 and target.pagination_param:
+                                await asyncio.sleep(random.uniform(1, 3))
+                    finally:
+                        await context.close()
+
+            new_zeros = store.update_site_health(target.name, all_jobs_found)
 
             return SiteResult(
                 site_name=target.name,
@@ -150,26 +180,26 @@ async def _process_site(
                 error=None,
                 scraper_tier_used=tier_used,
                 cost_usd=site_cost,
+                consecutive_zeros=new_zeros,
             )
 
         except Exception as exc:
             logger.error("[%s] unexpected error: %s", target.name, exc)
-            if not config.dry_run:
-                await send_failure_alert(
-                    error=exc,
-                    context=f"processing {target.name}",
-                    bot_token=config.telegram_bot_token,
-                    chat_id=config.telegram_chat_id,
-                )
-            store.update_site_health(target.name, 0)
+            # Per-site errors are collected and reported in the digest footer,
+            # not sent as immediate alerts (prevents alert flooding).
+            # Pass actual all_jobs_found: if extraction succeeded but matching failed,
+            # we should not mark the site as having zero jobs (which increments
+            # consecutive_zeros incorrectly).
+            new_zeros = store.update_site_health(target.name, all_jobs_found)
             return SiteResult(
                 site_name=target.name,
                 url=target.url,
-                jobs_found=0,
-                new_jobs=0,
-                matches=[],
+                jobs_found=all_jobs_found,
+                new_jobs=new_jobs,
+                matches=site_matches,
                 error=str(exc),
-                scraper_tier_used="none",
+                scraper_tier_used=tier_used,
+                consecutive_zeros=new_zeros,
             )
 
 
@@ -179,12 +209,11 @@ async def run(config: AppConfig) -> RunSummary:
     store = JobStore(supabase_client)
     semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
 
-    async with httpx.AsyncClient(timeout=30.0) as http_client:
-        tasks = [
-            _process_site(target, config, anthropic_client, store, http_client, semaphore)
-            for target in config.targets
-        ]
-        results: list[SiteResult] = await asyncio.gather(*tasks)
+    tasks = [
+        _process_site(target, config, anthropic_client, store, semaphore)
+        for target in config.targets
+    ]
+    results: list[SiteResult] = await asyncio.gather(*tasks)
 
     all_matches: list[MatchResult] = []
     errors: list[str] = []
@@ -203,8 +232,7 @@ async def run(config: AppConfig) -> RunSummary:
     sites_failed = sum(1 for r in results if r.error)
     sites_succeeded = len(results) - sites_failed
 
-    consecutive_zeros = {r.site_name: store.get_consecutive_zeros(r.site_name) for r in results}
-    stale_sites = {name: zeros for name, zeros in consecutive_zeros.items() if zeros >= 3}
+    stale_sites = {r.site_name: r.consecutive_zeros for r in results if r.consecutive_zeros >= 3}
 
     summary = RunSummary(
         run_at=datetime.now(timezone.utc),

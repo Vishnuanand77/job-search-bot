@@ -282,3 +282,37 @@ async def test_posted_time_is_none_when_field_is_invalid() -> None:
 async def test_system_prompt_contains_posted_time_field() -> None:
     from job_scout.extractor.claude_extractor import SYSTEM_PROMPT
     assert "posted_time" in SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# test_returns_empty_list_on_empty_content_list_from_api
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_returns_empty_list_on_empty_content_list_from_api():
+    """Test graceful handling when Anthropic SDK returns empty content list."""
+    client = MagicMock()
+    message = MagicMock()
+    message.content = []  # Empty content list triggers IndexError
+    message.usage.input_tokens = 100
+    message.usage.output_tokens = 50
+    client.messages.create = AsyncMock(return_value=message)
+
+    jobs, cost = await extract_jobs("page content", "Acme", "https://example.com", client)
+
+    assert jobs == []
+
+
+@pytest.mark.asyncio
+async def test_retries_on_transient_api_error(mocker):
+    """Test that extract_jobs retries on transient errors then ultimately fails."""
+    client = MagicMock()
+    client.messages.create = AsyncMock(side_effect=Exception("API unavailable"))
+
+    mocker.patch("tenacity.nap.time.sleep")
+
+    with pytest.raises(Exception, match="API unavailable"):
+        await extract_jobs("page content", "Acme", "https://example.com", client)
+
+    # Should retry 3 times
+    assert client.messages.create.call_count == 3

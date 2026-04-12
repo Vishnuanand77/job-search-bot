@@ -64,6 +64,7 @@ class SiteResult:
     error: str | None
     scraper_tier_used: str
     cost_usd: float = 0.0
+    consecutive_zeros: int = 0
 
 
 @dataclass
