@@ -4,12 +4,12 @@ A Python cron job that scrapes company career pages, scores new job postings aga
 
 ## How it works
 
-1. Scrapes configured career pages (HTTP with Playwright fallback for JS-heavy sites)
+1. Scrapes configured career pages using headless Chromium (Playwright)
 2. Extracts job listings using Claude Haiku
 3. Deduplicates against a Supabase store
 4. **Classifies** each new job into Software Engineering, Data Science, AI Engineering, or Not Relevant (Haiku)
 5. **Matches** relevant jobs against all resumes with role-specific scoring rubrics (Sonnet)
-6. Sends a Telegram digest grouped by company with scores and missing keywords
+6. Sends a Telegram digest grouped by company with scores, missing keywords, and runner-up resume matches
 
 ## Setup
 
@@ -46,29 +46,25 @@ Required environment variables (see `.env.example`):
 
 ### Add target companies
 
-Before adding a site, probe it to confirm which scraper tier works:
-
-```bash
-uv run python scripts/probe_sites.py https://example.com/careers
-```
-
-Then edit `config/targets.yaml`:
+Edit `config/targets.yaml` to add sites:
 
 ```yaml
 sites:
   - name: Stripe
     url: https://stripe.com/jobs
-    scrape_tier: http        # or 'playwright' for JS-heavy sites
+    scrape_tier: playwright
 
   # Optional: enable multi-page scraping
   - name: Wells Fargo
     url: https://www.wellsfargojobs.com/en/jobs/?search=&pagesize=20
-    scrape_tier: http
+    scrape_tier: playwright
     pagination:
       param: start     # query param to increment (e.g. start=0, start=20, ...)
       step: 20         # jobs per page
       max_pages: 5     # hard ceiling on pages fetched per run
 ```
+
+**Note:** All sites now use headless Chromium (Playwright). The `scrape_tier` field is retained for config compatibility but is no longer selective.
 
 Sites without a `pagination` block fetch a single page.
 

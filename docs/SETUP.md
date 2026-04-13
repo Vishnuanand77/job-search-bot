@@ -139,9 +139,27 @@ Adding a 4th resume is automatic — just drop a new `.md` file in `resumes/`.
 
 ## 8. Configure target sites
 
-Edit `config/targets.yaml` with your target career pages.
-**Run `scripts/probe_sites.py` first** to find the right tier for each site.
-See `docs/SCRAPER_PROBE.md` for instructions.
+Edit `config/targets.yaml` with your target career pages. All sites now use
+headless Chromium (Playwright) for consistent, JavaScript-capable scraping.
+
+Example:
+```yaml
+sites:
+  - name: Stripe
+    url: https://stripe.com/jobs
+    scrape_tier: playwright
+
+  - name: Wells Fargo
+    url: https://www.wellsfargojobs.com/en/jobs/?search=&pagesize=20
+    scrape_tier: playwright
+    pagination:
+      param: start
+      step: 20
+      max_pages: 5
+```
+
+(Optional) Use `scripts/probe_sites.py` to verify that a site loads correctly
+before adding it. See `docs/SCRAPER_PROBE.md` for instructions.
 
 ---
 

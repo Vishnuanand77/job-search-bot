@@ -797,20 +797,23 @@ if __name__ == "__main__":
 1. Load config — Telegram alert if fails
 2. Initialise Anthropic client (once)
 3. Initialise Supabase client (once)
-4. Initialise httpx.AsyncClient with 30s timeout (once)
 
 Process all sites concurrently via asyncio.Semaphore(3):
 
   For each site:
-    a. fetch_site_content → (text, tier) or catch ScrapingFailedError
-    b. extract_jobs → list[JobPosting]
-    c. update_site_health(site_name, len(jobs))
-    d. For each job:
-         i.   is_new? → skip if False
-         ii.  match_job → MatchResult | None
-         iii. mark_seen (with or without score)
-         iv.  if match → add to site matches
-    e. Record SiteResult
+    a. Create browser once, reuse context across paginated pages
+    b. For each page:
+         i.   fetch_site_content → (text, tier) or catch ScrapingFailedError
+         ii.  extract_jobs → list[JobPosting]
+         iii. For each job:
+              - is_new? → skip if False
+              - match_job → MatchResult | None
+              - mark_seen (with or without score)
+              - if match → add to site matches
+         iv.  Check pagination freshness (_detect_stop) → break if old
+         v.   Jitter 1-3s between pages, skip on final page
+    c. update_site_health(site_name, len(all_jobs_found)) → returns new consecutive_zeros
+    d. Record SiteResult
 
 5. Build RunSummary
 6. Check consecutive_zeros → attach stale warnings
@@ -818,7 +821,8 @@ Process all sites concurrently via asyncio.Semaphore(3):
 8. Return RunSummary
 ```
 
-Any exception escaping per-site handling → `send_failure_alert` before propagating.
+Per-site exceptions are caught and reported in the digest footer, not sent as
+immediate alerts (prevents alert flooding when multiple sites fail).
 
 **Tests (Red first):**
 - `test_processes_all_sites_in_config`
@@ -831,11 +835,90 @@ Any exception escaping per-site handling → `send_failure_alert` before propaga
 - `test_dry_run_skips_telegram_send`
 - `test_run_summary_counts_are_accurate`
 - `test_exits_with_code_1_when_any_site_failed`
-- `test_sends_failure_alert_on_unhandled_exception`
+- `test_per_site_errors_reported_in_digest_not_immediate_alert`
 
 **Done condition:** All tests pass. Full dry run:
 `DRY_RUN=true uv run python -m job_scout.orchestrator`
 **Git:** branch `phase-8-orchestrator` → `feat(phase-8): orchestrator` → `/pr-review` → PR → stop.
+
+---
+
+## Phase 8b — Reliability & Bug Fixes
+
+**What:** Post-Phase-8 hardening addressing 13 identified logic issues and
+reliability gaps from comprehensive codebase review.
+
+**Status:** ✅ COMPLETE (commit 959da51)
+
+### Changes
+
+1. **HAIKU_MAX_TOKENS: 256 → 1024**
+   - Role classification needs more space for verbose confidence reasoning
+   - File: `claude_matcher.py:20`
+
+2. **IndexError handling in response parsing**
+   - Added `IndexError` to all three `content[0]` access sites
+   - Files: `claude_extractor.py:86`, `claude_matcher.py:145,211`
+   - Returns graceful defaults (empty list, NOT_RELEVANT) on malformed responses
+
+3. **update_site_health returns new consecutive_zeros**
+   - Enables orchestrator to avoid redundant Supabase reads
+   - Files: `store.py`, `models.py` (SiteResult.consecutive_zeros field)
+
+4. **Tenacity retries on all external I/O**
+   - Applied `@_retry(stop=3, exponential backoff 1-10s)` to:
+     - `extract_jobs`, `classify_job_role` (Anthropic)
+     - Inner `_do_match` handler (only the `client.messages.create` block)
+     - `_post` (Telegram)
+     - All 5 `JobStore` methods (Supabase)
+   - Retries transient failures; gracefully returns defaults on exhaustion
+
+5. **Telegram output constraints (model + defensive layer)**
+   - System prompt: max 5 `missing_keywords`, 1 sentence `match_reason` (≤120 chars)
+   - Splitting logic: defensive rewrites to prevent overflow edge cases
+   - File: `telegram.py:22-145`
+
+6. **_detect_stop pagination freshness fix**
+   - Layer 1: Now checks ALL jobs (both timed and dated-only) when mixed signals
+   - Old: Filtered to intersection, missing recent date-only jobs
+   - File: `orchestrator.py:32-72`
+
+7. **Exception handlers pass actual job counts**
+   - Fixed: `update_site_health` called with hardcoded 0 on exception
+   - Now: Passes `all_jobs_found` captured before outer try block
+   - File: `orchestrator.py:186-208`
+
+8. **Pagination jitter: 1-3s sleep between requests**
+   - Prevents per-domain throttling; skips on final page
+   - File: `orchestrator.py:157-158`
+
+9. **HTTP 429 Retry-After handling**
+   - Respects header or defaults to 60s; re-raises for @_retry
+   - Files: `http_scraper.py:33-42`, `telegram.py:217-225`
+
+10. **classify_job_role JSON error handling**
+    - JSONDecodeError (API malformed) → re-raise (retry)
+    - KeyError/ValueError/IndexError (invalid enum) → return NOT_RELEVANT
+    - File: `claude_matcher.py:168-177`
+
+11. **Browser context reuse across pagination pages**
+    - Create browser/context once per site, reuse across pages
+    - New function: `fetch_html_with_context()` in `playwright_scraper.py`
+    - File: `orchestrator.py:93-173`
+
+12. **Suppress per-site immediate alerts**
+    - Removed: `send_failure_alert()` calls from per-site exception handlers
+    - Why: Prevents flooding when multiple sites fail
+    - Errors reported only in digest footer (already lists failures)
+    - File: `orchestrator.py:186-208`
+
+13. **All 180 tests passing**
+    - Added tests for JSON parse retry, browser context reuse, per-site error digests
+    - Updated pagination jitter mocking for new browser lifecycle
+    - Coverage ≥ 80%
+
+**Done condition:** ✅ All reliability improvements committed and tested.
+**Git:** `feat(reliability): Complete 13 bug fixes and reliability improvements`
 
 ---
 
