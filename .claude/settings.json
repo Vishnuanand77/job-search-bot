@@ -9,11 +9,11 @@
       "Bash(git checkout *)",
       "Bash(git branch *)",
       "Bash(gh pr *)",
+      "Bash(git commit *)",
       "Bash(gh issue *)"
     ],
     "deny": [
       "Bash(git push --force*)",
-      "Bash(git commit *)",
       "Bash(git reset --hard*)",
       "Bash(git clean *)",
       "Bash(pip *)",
